@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 static shell_state_t *g_shell = NULL;
@@ -293,6 +294,26 @@ static void execute_text(const char *text, shell_state_t *sh)
 /* Main loop                                                          */
 /* ------------------------------------------------------------------ */
 
+static void print_prompt(shell_state_t *sh)
+{
+    if (!sh->show_prompt_info) {
+        fputs(MSH_PROMPT, stdout);
+        return;
+    }
+
+    {
+        int running = 0;
+        int i;
+
+        for (i = 0; i < MSH_MAX_JOBS; ++i) {
+            if (sh->jobs[i].used && sh->jobs[i].running)
+                ++running;
+        }
+        printf("shell [%d|%.2fs|%d]> ", sh->last_status,
+               sh->last_duration, running);
+    }
+}
+
 static int run_repl(shell_state_t *sh)
 {
     char *line = NULL;
@@ -304,7 +325,7 @@ static int run_repl(shell_state_t *sh)
         job_reap(sh);
 
         if (sh->interactive) {
-            fputs(MSH_PROMPT, stdout);
+            print_prompt(sh);
             fflush(stdout);
         }
 
@@ -331,7 +352,15 @@ static int run_repl(shell_state_t *sh)
         if (n == 0)
             continue;
 
-        shell_execute_line(line, sh);
+        {
+            struct timespec start, end;
+
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            shell_execute_line(line, sh);
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            sh->last_duration = (double)(end.tv_sec - start.tv_sec) +
+                                (double)(end.tv_nsec - start.tv_nsec) / 1e9;
+        }
     }
 
     free(line);

@@ -17,6 +17,13 @@
 | 내장 명령 | `ls`, `pwd`, `cd`, `mkdir`, `rmdir`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep` |
 | 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:` |
 | 네트워크 확장 | `netserv`(TCP 서버), `netcli`(클라이언트), 토큰 인증, 동시 접속, 타임아웃 |
+| 조건부 실행 | `&&`, `||` |
+| glob | `*`, `?`, `[...]` (인용되지 않은 경우) |
+| 파서 시각화 | `explain '명령줄'` |
+| 휴지통/undo | `rm`, `mv` 덮어쓰기, `cp -f` 덮어쓰기를 `~/.myshell_trash`로 이동, `undo`로 복원 |
+| HTTP 서버 | `serve -p 8080 -d DIR` |
+| 주기 실행 | `watch -n 2 -c 3 '명령'` |
+| 프롬프트 확장 | `prompt on/off` (종료 코드·실행 시간·작업 수) |
 
 Ctrl-Z는 과제 명세에 맞춰 `SIGQUIT`에 매핑했습니다. 일반 리눅스의 `SIGTSTP`와
 다르며, 쉘 종료 시 터미널 설정을 복구합니다.
@@ -330,7 +337,66 @@ client-B
 위 예시의 `lines.txt`는 2.5절 (4)에서 만든 파일입니다. 새 셸에서 시작했다면
 `printf 'alpha\nbeta\ngamma\n' > lines.txt`를 먼저 실행합니다.
 
-#### (7) 테스트 실행
+#### (7) explain, `&&`/`||`, glob
+
+```text
+shell> explain 'cat missing | grep x > out 2>&1 &'
+explain: 1 pipeline(s)
+
+[pipeline 1] background (first)
+  ├─ cmd: cat missing
+  └─ cmd: grep x
+       ├─ stdout → out (truncate)
+       └─ stderr → stdout
+shell> false && echo no || echo fallback
+fallback
+shell> printf 'a\n' > g1.txt
+shell> printf 'b\n' > g2.txt
+shell> echo g*.txt
+g1.txt g2.txt
+shell> echo "g*.txt"
+g*.txt
+```
+
+#### (8) undo, serve, watch, prompt
+
+```text
+shell> echo keep > undo.txt
+shell> rm undo.txt
+shell> undo
+undo: restored '/home/gong0000/myshell_demo/undo.txt'
+shell> cat undo.txt
+keep
+```
+
+```text
+shell> serve -1 -p 8080 -d . &
+[1] 12345
+serve: http://127.0.0.1:8080/ (root: /home/gong0000/myshell_demo) (once)
+shell> sleep 0.3
+shell> curl -s http://127.0.0.1:8080/undo.txt
+keep
+shell> wait
+```
+
+```text
+shell> watch -n 1 -c 2 echo hello
+Every 1s: echo hello    (...)
+hello
+...
+```
+
+```text
+shell> prompt on
+prompt: on
+shell [0|0.00s|0]> echo hi
+hi
+shell [0|0.00s|0]> prompt off
+prompt: off
+shell>
+```
+
+#### (9) 테스트 실행
 
 ```bash
 make test
@@ -348,8 +414,19 @@ Network tests failed: 0
 File-input tests passed: 4
 File-input tests failed: 0
 ...
+Extension tests passed: 32
+Extension tests failed: 0
+...
 SIGNAL TEST PASSED
 ```
+
+테스트 스크립트:
+
+- `tests/run_tests.sh`: 94개 기능 테스트
+- `tests/test_net.sh`: 23개 네트워크 테스트
+- `tests/test_file_input.sh`: 4개 파일 입력 테스트
+- `tests/test_ext.sh`: 32개 확장 테스트
+- `tests/test_signals.py`: PTY 시그널/프롬프트 테스트
 
 ### 2.6 스크린샷 체크리스트
 
@@ -368,6 +445,11 @@ SIGNAL TEST PASSED
 | `11_net_auth.png` | 토큰 인증 | 2.5절 (6) 두 번째 블록 |
 | `12_net_interactive.png` | 대화형 netcli | 2.5절 (6) 대화형 블록 |
 | `13_make_test.png` | 전체 테스트 결과 | `make test` |
+| `14_explain.png` | 파서 시각화 | `explain 'cat a \| grep x > o 2>&1 &'` |
+| `15_and_or_glob.png` | `&&`/`||`, glob | `false && echo no \|\| echo fallback` |
+| `16_undo.png` | rm 후 undo | `echo keep > u.txt; rm u.txt; undo; cat u.txt` |
+| `17_serve.png` | HTTP 서버 | `serve -1 -p 8080 -d . &` + `curl` |
+| `18_watch_prompt.png` | watch와 확장 프롬프트 | `watch -n 1 -c 2 echo hi`, `prompt on` |
 
 캡처 팁:
 
@@ -407,11 +489,16 @@ SIGNAL TEST PASSED
 │   ├── cmd_fs.c           mkdir, rmdir, ln, cp, rm, mv
 │   ├── cmd_text.c         cat, grep
 │   ├── cmd_net.c          netserv, netcli
+│   ├── cmd_explain.c      파서 결과 시각화
+│   ├── cmd_trash.c        휴지통과 undo
+│   ├── cmd_serve.c        HTTP 파일 서버
+│   ├── cmd_watch.c        주기 실행
 │   └── util.c             공용 유틸
 ├── tests/
 │   ├── run_tests.sh
 │   ├── test_net.sh
 │   ├── test_file_input.sh
+│   ├── test_ext.sh
 │   ├── test_signals.py
 │   └── manual_test.sh
 └── docs/
@@ -437,22 +524,29 @@ SIGNAL TEST PASSED
 | `mv` | `-f`, `-i`, `-n`, `-v` |
 | `cat` | `-n`, `-b`, `-E`, `-T`, `-A` |
 | `grep` | `-i`, `-v`, `-n`, `-c`, `-l`, `-r`/`-R`, `-E`, `-F`, `-q`, `-s`, `-h`, `-H`, `-e` |
+| `explain` | `explain '명령줄'` |
+| `undo` | 마지막 rm/mv/cp -f 작업 복원 |
+| `serve` | `-p PORT`, `-d DIR`, `-a ADDR`, `-1` |
+| `watch` | `-n SEC`, `-c COUNT` |
+| `prompt` | `on`, `off` |
 
 ## 5. 제약
 
-- glob(`*`, `?`), 명령 치환(`$(...)`), `&&`/`||`, `1>&2`, `fg`/`bg`는 지원하지 않습니다.
+- 명령 치환(`$(...)`), `1>&2`, `fg`/`bg`는 지원하지 않습니다.
 - 변수 확장 결과의 단어 분할은 하지 않습니다. `$VAR`는 한 인자로 유지됩니다.
 - 원격 명령의 백그라운드 실행(`&`)은 거부합니다.
+- `undo`는 마지막 한 건만 복원합니다. 휴지통은 `~/.myshell_trash`에 쌓입니다.
 - 원격 명령은 명령마다 자식 프로세스에서 실행되므로 `cd`가 다음 명령에 유지되지 않습니다.
-- 서버는 기본적으로 127.0.0.1에만 바인딩합니다. 외부 주소를 열려면 `-s TOKEN`이 필요합니다.
+- netserv는 기본적으로 127.0.0.1에만 바인딩합니다. 외부 주소를 열려면 `-s TOKEN`이 필요합니다.
+- serve는 기본적으로 127.0.0.1에 바인딩하며 별도 인증은 없습니다. 외부 공개는 피합니다.
 - `grep`은 POSIX 기본/확장 정규표현식과 고정 문자열(`-F`)을 지원합니다.
 
 ## 6. 팀 역할
 
 | 팀원 | 학번 | GitHub | 담당 |
 |---|---|---|---|
-| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), `netserv`, `pwd`, `cd`, `ls`, `mkdir`, `rmdir` |
-| 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `netcli`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep`, 네트워크/기능 테스트, 문서 |
+| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), `explain`, `netserv`, `serve`, `pwd`, `cd`, `ls`, `mkdir`, `rmdir` |
+| 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `netcli`, `undo`/휴지통, `watch`, `prompt`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep`, 테스트/문서 |
 
 ## 7. 보고서 재생성
 

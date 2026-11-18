@@ -14,6 +14,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <glob.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,7 +79,7 @@ typedef struct {
     int cap;
 } token_list_t;
 
-static void token_add(token_list_t *tl, token_type_t type, char *text)
+static void token_add(token_list_t *tl, token_type_t type, char *text, int glob)
 {
     if (tl->count == tl->cap) {
         tl->cap = tl->cap ? tl->cap * 2 : 16;
@@ -87,6 +88,7 @@ static void token_add(token_list_t *tl, token_type_t type, char *text)
     }
     tl->items[tl->count].type = type;
     tl->items[tl->count].text = text;
+    tl->items[tl->count].glob = glob;
     tl->count++;
 }
 
@@ -121,6 +123,8 @@ static int match_operator(const char *p, token_type_t *type, int *length)
         { ">>",  TOK_OUT_APPEND },
         { ">",   TOK_OUT },
         { "<",   TOK_IN },
+        { "&&",  TOK_AND_IF },
+        { "||",  TOK_OR_IF },
         { "|",   TOK_PIPE },
         { ";",   TOK_SEMI },
         { "&",   TOK_AMP },
@@ -270,6 +274,8 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
     wordbuf_t wb = { 0 };
     int started = 0;
     int closed;
+    int unquoted_wild = 0;
+    int quoted_wild = 0;
 
     while (*p != '\0') {
         char c = *p;
@@ -297,6 +303,8 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
                     closed = 1;
                     break;
                 }
+                if (*p == '*' || *p == '?' || *p == '[')
+                    quoted_wild = 1;
                 wb_putc(&wb, *p++);
             }
             if (!closed) {
@@ -319,6 +327,8 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
                 if (*p == '\\') {
                     char next = p[1];
                     if (next == '$' || next == '"' || next == '\\') {
+                        if (next == '*' || next == '?' || next == '[')
+                            quoted_wild = 1;
                         wb_putc(&wb, next);
                         p += 2;
                     } else if (next == '\n') {
@@ -334,6 +344,8 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
                         goto fail;
                     continue;
                 }
+                if (*p == '*' || *p == '?' || *p == '[')
+                    quoted_wild = 1;
                 wb_putc(&wb, *p++);
             }
             if (!closed) {
@@ -346,8 +358,11 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
 
         if (c == '\\') {
             ++p;
-            if (*p != '\0')
+            if (*p != '\0') {
+                if (*p == '*' || *p == '?' || *p == '[')
+                    quoted_wild = 1;
                 wb_putc(&wb, *p++);
+            }
             started = 1;
             continue;
         }
@@ -359,6 +374,8 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
             continue;
         }
 
+        if (c == '*' || c == '?' || c == '[')
+            unquoted_wild = 1;
         wb_putc(&wb, c);
         ++p;
         started = 1;
@@ -370,7 +387,8 @@ static int read_word(const char **pp, token_list_t *tl, shell_state_t *sh,
         return 0;
     }
 
-    token_add(tl, TOK_WORD, wb.buf != NULL ? wb.buf : msh_strdup(""));
+    token_add(tl, TOK_WORD, wb.buf != NULL ? wb.buf : msh_strdup(""),
+              unquoted_wild && !quoted_wild);
     *pp = p;
     return 1;
 
@@ -397,7 +415,7 @@ static int tokenize(const char *line, token_list_t *tl, shell_state_t *sh,
             break;
 
         if (match_operator(p, &type, &length)) {
-            token_add(tl, type, NULL);
+            token_add(tl, type, NULL, 0);
             p += length;
             continue;
         }
@@ -409,7 +427,7 @@ static int tokenize(const char *line, token_list_t *tl, shell_state_t *sh,
             break;
     }
 
-    token_add(tl, TOK_END, NULL);
+    token_add(tl, TOK_END, NULL, 0);
     return 0;
 }
 
@@ -417,7 +435,7 @@ static int tokenize(const char *line, token_list_t *tl, shell_state_t *sh,
 /* Command building                                                   */
 /* ------------------------------------------------------------------ */
 
-static void command_add_arg(command_t *cmd, char *arg)
+static void command_add_arg_raw(command_t *cmd, char *arg)
 {
     if (cmd->argc + 1 >= MSH_MAX_ARGS) {
         msh_error("too many arguments (limit %d)", MSH_MAX_ARGS - 1);
@@ -430,6 +448,31 @@ static void command_add_arg(command_t *cmd, char *arg)
     cmd->argv[cmd->argc] = NULL;
 }
 
+static void command_add_arg(command_t *cmd, char *arg, int do_glob)
+{
+    glob_t matches;
+    int rc;
+
+    if (!do_glob || strpbrk(arg, "*?[") == NULL) {
+        command_add_arg_raw(cmd, arg);
+        return;
+    }
+
+    memset(&matches, 0, sizeof(matches));
+    rc = glob(arg, 0, NULL, &matches);
+    if (rc == 0) {
+        size_t i;
+
+        for (i = 0; i < matches.gl_pathc; ++i)
+            command_add_arg_raw(cmd, msh_strdup(matches.gl_pathv[i]));
+        globfree(&matches);
+        free(arg);
+    } else {
+        globfree(&matches);
+        command_add_arg_raw(cmd, arg);
+    }
+}
+
 static void pipeline_add_command(pipeline_t *pl, command_t *cmd)
 {
     pl->commands = msh_realloc(pl->commands,
@@ -439,12 +482,18 @@ static void pipeline_add_command(pipeline_t *pl, command_t *cmd)
     memset(cmd, 0, sizeof(*cmd));
 }
 
-static void command_list_add(command_list_t *list, pipeline_t *pl)
+static void command_list_add(command_list_t *list, pipeline_t *pl,
+                             connector_t connector)
 {
     list->pipelines = msh_realloc(list->pipelines,
                                   (size_t)(list->npipelines + 1) *
                                   sizeof(pipeline_t));
-    list->pipelines[list->npipelines++] = *pl;
+    list->connectors = msh_realloc(list->connectors,
+                                   (size_t)(list->npipelines + 1) *
+                                   sizeof(connector_t));
+    list->pipelines[list->npipelines] = *pl;
+    list->connectors[list->npipelines] = connector;
+    list->npipelines++;
     memset(pl, 0, sizeof(*pl));
 }
 
@@ -580,6 +629,7 @@ int parse_line(const char *line, shell_state_t *sh, command_list_t *list,
     token_list_t tl = { 0 };
     command_list_t result = { 0 };
     pipeline_t pl;
+    connector_t pending = CONN_ALWAYS;
     int i = 0;
 
     memset(&pl, 0, sizeof(pl));
@@ -592,15 +642,21 @@ int parse_line(const char *line, shell_state_t *sh, command_list_t *list,
     }
 
     while (i < tl.count && tl.items[i].type != TOK_END) {
-        int command_started;
+        connector_t connector = pending;
+        int command_started = 0;
 
+        pending = CONN_ALWAYS;
         if (tl.items[i].type == TOK_SEMI) {
             ++i;
             continue;
         }
+        if (tl.items[i].type == TOK_AND_IF || tl.items[i].type == TOK_OR_IF ||
+            tl.items[i].type == TOK_AMP || tl.items[i].type == TOK_PIPE) {
+            *error = msh_strdup("syntax error: unexpected operator");
+            goto fail;
+        }
 
         memset(&pl, 0, sizeof(pl));
-        command_started = 0;
 
         for (;;) {
             command_t cmd;
@@ -612,8 +668,9 @@ int parse_line(const char *line, shell_state_t *sh, command_list_t *list,
 
                 if (type == TOK_WORD) {
                     char *word = tl.items[i].text;
+                    int do_glob = tl.items[i].glob;
                     tl.items[i].text = NULL;
-                    command_add_arg(&cmd, word);
+                    command_add_arg(&cmd, word, do_glob);
                     ++i;
                 } else if (is_redirect(type)) {
                     if (parse_redirection(&tl, &i, &cmd.redir, error) < 0) {
@@ -638,7 +695,9 @@ int parse_line(const char *line, shell_state_t *sh, command_list_t *list,
                 ++i;
                 if (i >= tl.count || tl.items[i].type == TOK_END ||
                     tl.items[i].type == TOK_SEMI ||
-                    tl.items[i].type == TOK_AMP) {
+                    tl.items[i].type == TOK_AMP ||
+                    tl.items[i].type == TOK_AND_IF ||
+                    tl.items[i].type == TOK_OR_IF) {
                     *error = msh_strdup("syntax error near '|'");
                     goto fail;
                 }
@@ -655,14 +714,36 @@ int parse_line(const char *line, shell_state_t *sh, command_list_t *list,
         if (i < tl.count && tl.items[i].type == TOK_AMP) {
             pl.background = 1;
             ++i;
-            if (i < tl.count && tl.items[i].type == TOK_AMP) {
+            if (i < tl.count && (tl.items[i].type == TOK_AMP ||
+                                 tl.items[i].type == TOK_AND_IF ||
+                                 tl.items[i].type == TOK_OR_IF)) {
                 *error = msh_strdup("syntax error near '&'");
                 goto fail;
             }
+        } else if (i < tl.count && tl.items[i].type == TOK_AND_IF) {
+            pending = CONN_AND;
+            ++i;
+        } else if (i < tl.count && tl.items[i].type == TOK_OR_IF) {
+            pending = CONN_OR;
+            ++i;
+        } else if (i < tl.count && tl.items[i].type == TOK_SEMI) {
+            ++i;
+        } else if (i < tl.count && tl.items[i].type != TOK_END) {
+            *error = msh_strdup("syntax error: unexpected token");
+            goto fail;
         }
 
         pl.text = build_pipeline_text(&pl);
-        command_list_add(&result, &pl);
+        command_list_add(&result, &pl, connector);
+
+        if (pending != CONN_ALWAYS &&
+            (i >= tl.count || tl.items[i].type == TOK_END ||
+             tl.items[i].type == TOK_SEMI || tl.items[i].type == TOK_AMP ||
+             tl.items[i].type == TOK_AND_IF || tl.items[i].type == TOK_OR_IF ||
+             tl.items[i].type == TOK_PIPE)) {
+            *error = msh_strdup("syntax error: missing command after connector");
+            goto fail;
+        }
     }
 
     token_list_free(&tl);
@@ -711,5 +792,6 @@ void free_command_list(command_list_t *list)
     for (i = 0; i < list->npipelines; ++i)
         free_pipeline(&list->pipelines[i]);
     free(list->pipelines);
+    free(list->connectors);
     memset(list, 0, sizeof(*list));
 }

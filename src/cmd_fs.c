@@ -81,7 +81,9 @@ static int copy_symlink_entry(const char *src, const char *dst, int force,
         if (interactive && !force &&
             !msh_confirm("overwrite '%s'?", dst))
             return 0;
-        if (unlink(dst) < 0) {
+        if (force && trash_move(dst) < 0)
+            return -1;
+        if (!force && unlink(dst) < 0) {
             msh_perror(dst);
             return -1;
         }
@@ -412,6 +414,9 @@ static int copy_regular(const char *src, const char *dst,
     if (opts->interactive && msh_path_exists(dst) &&
         !msh_confirm("overwrite '%s'?", dst))
         return 0;
+    if (opts->force && msh_path_exists(dst) &&
+        trash_move(dst) < 0)
+        return -1;
 
     if (msh_copy_file_contents(src, dst, sst->st_mode, opts->force) < 0)
         return -1;
@@ -628,6 +633,7 @@ typedef struct {
     int force;
     int interactive;
     int verbose;
+    int no_trash;
 } rm_options_t;
 
 static int rm_one(const char *path, const rm_options_t *opts)
@@ -655,6 +661,14 @@ static int rm_one(const char *path, const rm_options_t *opts)
     if (opts->interactive && !opts->force &&
         !msh_confirm("remove '%s'?", path))
         return 0;
+
+    if (!opts->no_trash) {
+        if (trash_move(path) < 0)
+            return -1;
+        if (opts->verbose)
+            printf("trashed '%s' (undo available)\n", path);
+        return 0;
+    }
 
     if (S_ISDIR(st.st_mode)) {
         if (msh_remove_tree(path) < 0)
@@ -690,6 +704,10 @@ int cmd_rm(int argc, char **argv)
             end_options = 1;
             continue;
         }
+        if (!end_options && strcmp(arg, "--no-trash") == 0) {
+            opts.no_trash = 1;
+            continue;
+        }
         if (!end_options && is_option(arg)) {
             const char *p;
 
@@ -712,7 +730,7 @@ int cmd_rm(int argc, char **argv)
                     break;
                 default:
                     msh_error("rm: invalid option -- '%c'", *p);
-                    msh_usage("rm [-rR] [-f] [-i] [-v] file ...");
+                    msh_usage("rm [-rR] [-f] [-i] [-v] [--no-trash] file ...");
                     free(operands);
                     return 2;
                 }
@@ -820,6 +838,11 @@ static int mv_one(const char *src, const char *dst,
         if (!S_ISDIR(dst_st.st_mode) && S_ISDIR(sst.st_mode)) {
             msh_error("cannot overwrite non-directory '%s' with directory",
                       target);
+            free(target);
+            return -1;
+        }
+        if (!S_ISDIR(dst_st.st_mode) &&
+            trash_move_ex(target, src) < 0) {
             free(target);
             return -1;
         }

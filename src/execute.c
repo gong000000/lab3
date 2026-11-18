@@ -347,12 +347,23 @@ fork_failed:
 int execute_command_list(command_list_t *list, shell_state_t *sh)
 {
     int i;
-    int rc = 0;
+    int last = sh->last_status;
 
     for (i = 0; i < list->npipelines; ++i) {
+        connector_t connector = list->connectors != NULL
+                                    ? list->connectors[i]
+                                    : CONN_ALWAYS;
+
         if (sh->should_exit)
             break;
-        rc = execute_pipeline(&list->pipelines[i], sh);
+        if (i > 0) {
+            if (connector == CONN_AND && last != 0)
+                continue;
+            if (connector == CONN_OR && last == 0)
+                continue;
+        }
+        last = execute_pipeline(&list->pipelines[i], sh);
     }
-    return rc;
+    sh->last_status = last;
+    return last;
 }

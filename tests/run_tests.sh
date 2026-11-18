@@ -18,6 +18,8 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$WORK" || exit 1
+export HOME="$WORK/home"
+mkdir -p "$HOME"
 
 run_shell() {
     "$BIN" -c "$1" >"$OUT" 2>"$ERR"

@@ -47,6 +47,8 @@
 | 필수 내장 명령 | ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep |
 | 추가 내장 명령 | echo, export, unset, jobs, wait, help, true, false, : |
 | 네트워크 확장 | netserv(원격 쉘 서버), netcli(원격 쉘 클라이언트) |
+| 파서/문법 확장 | &&, \|\|, glob(*, ?, []), explain(파서 시각화) |
+| 편의 기능 | undo/휴지통, serve(HTTP), watch(주기 실행), prompt(확장 프롬프트) |
 | 추가 문법 | >>, 2>, 2>>, 2>&1, &>, &>>, 다단 파이프, 세미콜론(;), 따옴표, 변수 확장 |
 | 문서/배포 | README, MIT LICENSE, 결과보고서(HWP/PDF), 자동 테스트 |
 
@@ -68,14 +70,15 @@
 
 ## 1.5 결과 요약
 
-최종 프로그램은 총 5,629줄의 C 소스(헤더 포함)로 구성되며, 11개 필수 내장 명령과 9개 보조 내장 명령, TCP 원격 쉘을 제공한다. 기능 테스트 94개, 네트워크 테스트 23개, 파일 입력 테스트 4개와 PTY 시그널 테스트를 통과했고, ASan/UBSan 빌드에서도 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.
+최종 프로그램은 총 6,913줄의 C 소스(헤더 포함)로 구성되며, 11개 필수 내장 명령과 9개 보조 내장 명령, TCP 원격 쉘을 제공한다. 기능 테스트 94개, 확장 테스트 32개, 네트워크 테스트 23개, 파일 입력 테스트 4개와 PTY 시그널 테스트를 통과했고, ASan/UBSan 빌드에서도 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.
 
 | 항목 | 결과 |
 |---|---|
-| 소스 규모 | 헤더 포함 5,629줄 (설계 지침 1,000~10,000줄 충족) |
+| 소스 규모 | 헤더 포함 6,913줄 (설계 지침 1,000~10,000줄 충족) |
 | 필수 내장 명령 | ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개) |
 | 보조 내장 명령 | echo, export, unset, jobs, wait, help, true, false, : (9개) |
 | 기능 테스트 | 94 / 94 통과 |
+| 확장 테스트 | 32 / 32 통과 (explain·&&/\|\|·glob·undo·serve·watch) |
 | 네트워크 테스트 | 23 / 23 통과 (인증·동시 접속·타임아웃·원격 파이프) |
 | 시그널 테스트 | PTY에서 Ctrl-C/Ctrl-Z 후 쉘 생존 확인 |
 | 문서/배포 | README, MIT LICENSE, HWP/PDF 보고서, 테스트 스크립트 |
@@ -97,6 +100,8 @@
 | R4 | 재지향 및 파이프 | open()/dup2()로 <, >, >>, 2>, 2>>, 2>&1, &>, &>> 구현. 파이프는 pipe()와 fork()를 명령 수만큼 반복하고, 마지막 명령의 종료 상태를 사용. | 파일 내용 비교, 다단 파이프, stderr 분리/병합 테스트 |
 | R5 | 11개 명령 구현 | 각 명령을 별도 C 모듈로 구현. 시스템 콜(lstat, opendir, link, symlink, readlink, rename, unlink, rmdir 등)과 POSIX regex 사용. | 명령별 옵션/오류/경계 조건을 자동 테스트로 검증 |
 | R6 | 복합 응용 확장 | TCP 소켓 기반 netserv/netcli 구현. 셸의 parser/executor를 재사용해 원격 명령을 실행하고, 토큰 인증·타임아웃·동시 접속·출력 캡처를 지원. | 인증 성공/실패, 원격 파이프/재지향, 동시 접속, 타임아웃 테스트 |
+| R7 | 파서/문법 확장 | &&/\|\| 연결자와 glob(*, ?, [])를 parser에 추가하고, explain으로 파이프·재지향·백그라운드 구조를 실행 없이 출력. | 조건부 실행, 글롭 확장, explain 도식 테스트 |
+| R8 | 편의/운영 기능 | rm/mv/cp -f 대상을 휴지통으로 이동하고 undo로 복원. serve(HTTP), watch, prompt on/off 추가. | undo 복원, HTTP GET/ traversal 차단, watch 실행, 프롬프트 테스트 |
 
 
 ---
@@ -145,16 +150,20 @@
 
 | 파일 | 역할 | 줄 수 |
 |---|---|---|
-| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 235 |
-| src/main.c | REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화 | 391 |
-| src/parser.c | 토큰화, 따옴표/변수/틸드 확장, 파이프라인/재지향 문법 | 715 |
-| src/execute.c | fork/exec, 파이프, dup2, 전경/백그라운드 대기 | 358 |
+| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 254 |
+| src/main.c | REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화 | 419 |
+| src/parser.c | 토큰화, 따옴표/변수/틸드 확장, &&/\|\|/glob, 파이프라인/재지향 문법 | 797 |
+| src/execute.c | fork/exec, 파이프, dup2, 전경/백그라운드 대기 | 369 |
 | src/jobs.c | 백그라운드 job 테이블, 좀비 회수, 종료 시 SIGHUP | 154 |
-| src/builtin.c | 내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/export | 527 |
+| src/builtin.c | 내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/prompt | 557 |
 | src/cmd_ls.c | ls (-a, -l, -R, -h) | 370 |
-| src/cmd_fs.c | mkdir, rmdir, ln, cp, rm, mv | 929 |
+| src/cmd_fs.c | mkdir, rmdir, ln, cp, rm, mv (휴지통 연동) | 952 |
 | src/cmd_text.c | cat, grep (POSIX regex) | 469 |
 | src/cmd_net.c | TCP 원격 쉘 서버/클라이언트, 인증·타임아웃·출력 캡처 | 953 |
+| src/cmd_explain.c | 파서 결과 ASCII 시각화 | 111 |
+| src/cmd_trash.c | 휴지통 이동, undo 매니페스트 | 306 |
+| src/cmd_serve.c | HTTP GET/HEAD 파일 서버 | 544 |
+| src/cmd_watch.c | 주기 실행 | 125 |
 | src/util.c | 메모리/경로/파일 복사·삭제/모드 출력 유틸 | 528 |
 
 
@@ -169,6 +178,8 @@
 | job_t | id, pgid, pids[], done[], running, status, command | 백그라운드 작업의 프로세스 그룹과 완료 상태 |
 | shell_state_t | interactive, last_status, last_bg_pid, jobs[], termios | 쉘 전체 상태($?, $!, 작업 테이블, 터미널 설정) |
 | net_buf_t | data, len, truncated | 원격 명령의 stdout/stderr 캡처 버퍼 |
+| connector_t | ALWAYS, AND, OR | &&/\|\|로 연결된 파이프라인의 실행 조건 |
+| token_t | text, glob | 단어 토큰과 인용되지 않은 글롭 확장 여부 |
 
 
 ## 2.5 핵심 설계
@@ -176,7 +187,7 @@
 
 ### 2.5.1 파싱과 확장
 
-파서는 두 단계로 동작한다. 먼저 main.c의 find_separator()가 따옴표와 이스케이프를 고려하여 최상위 세미콜론(;)과 앰퍼샌드(&)를 찾아 명령 목록을 실행 단위로 나눈다. 이 시점에 각 명령을 바로 파싱·실행하므로, export로 바꾼 환경변수나 직전 명령의 $?가 다음 명령에 정확히 반영된다. 이어서 parser.c의 tokenizer가 단어와 연산자를 분리하고, 작은따옴표/큰따옴표, 백슬래시, $VAR/${VAR}, $?, $$, $!, 선행 ~를 확장한다.
+파서는 두 단계로 동작한다. 먼저 main.c의 find_separator()가 따옴표와 이스케이프를 고려하여 최상위 세미콜론(;)과 앰퍼샌드(&)를 찾아 명령 목록을 실행 단위로 나눈다. 이 시점에 각 명령을 바로 파싱·실행하므로, export로 바꾼 환경변수나 직전 명령의 $?가 다음 명령에 정확히 반영된다. 이어서 parser.c의 tokenizer가 단어와 연산자를 분리하고, 작은따옴표/큰따옴표, 백슬래시, $VAR/${VAR}, $?, $$, $!, 선행 ~를 확장한다. &&/||는 connector_t로 연결하고, 인용되지 않은 글롭은 glob()으로 전개한다.
 
 ```text
 /* main.c: 실행 시점에 ;와 &를 분리 (개념 발췌) */
@@ -275,6 +286,13 @@ response: status | stdout_len | stderr_len | stdout | stderr
 ```
 
 
+### 2.5.6 문법/편의 기능 확장
+
+parser에 &&/|| 토큰과 connector_t를 추가했다. execute_command_list()는 직전 종료 상태를 보고 다음 파이프라인을 실행하거나 건너뛴다. 인용되지 않은 *, ?, []는 glob()으로 확장하고, 인용된 패턴은 문자 그대로 둔다. explain은 parse_line() 결과를 실행하지 않고 파이프라인·재지향·백그라운드 구조로 출력한다.
+
+rm, mv 덮어쓰기, cp -f 덮어쓰기는 대상을 ~/.myshell_trash로 옮기고 매니페스트에 기록한다. undo는 마지막 항목을 원래 경로로 되돌린다. serve는 HTTP GET/HEAD와 디렉터리 목록을 제공하고, realpath()로 문서 루트 밖 접근을 차단한다. watch는 명령을 주기적으로 재실행하며, prompt on은 종료 코드·소요 시간·실행 중 작업 수를 프롬프트에 표시한다.
+
+
 ## 2.6 설계 구성 요소와의 대응
 
 | 설계 구성 요소 | 본 프로젝트에서의 수행 내용 |
@@ -282,7 +300,7 @@ response: status | stdout_len | stderr_len | stdout | stderr
 | 목표/기준 설정 | 교재 357쪽 simplesh.c를 기준으로 5개 필수 요구사항과 11개 내장 명령, 원격 쉘 확장을 목표로 설정 |
 | 분석 | 요구사항을 R1~R6으로 분해하고, 프로세스/시그널/파일 시스템/텍스트/네트워크로 나누어 분석 |
 | 제작 | parser, executor, job manager, builtin, cmd_* 모듈로 구현. Makefile로 재현 가능한 빌드 제공 |
-| 시험 | 94개 기능 테스트 + 23개 네트워크 테스트 + 4개 파일 입력 테스트 + PTY 시그널 테스트 |
+| 시험 | 94개 기능 + 32개 확장 + 23개 네트워크 + 4개 파일 입력 테스트 + PTY 시그널 테스트 |
 
 
 ---
@@ -292,7 +310,7 @@ response: status | stdout_len | stderr_len | stdout | stderr
 
 | 제한 요소 | 설계 기준 | 본 프로젝트의 대응 |
 |---|---|---|
-| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 헤더 포함 5,629줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
+| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 헤더 포함 6,913줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
 | 안정성 | 외부 환경 변화에도 지속적으로 동작 | 오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 94개 자동 테스트, ASan/UBSan 검증 |
 | 생산성 | 모든 기능이 동작하고 응용 가능 | 11개 필수 명령 + 9개 보조 명령, 다단 파이프/재지향, 옵션 지원, README/보고서 제공 |
 | 윤리성/사회적 영향 | 안전하고 책임 있는 소프트웨어 | rm의 /, ., .. 보호, system()/popen() 미사용, MIT 라이선스로 투명한 재사용 허용 |
@@ -302,12 +320,12 @@ response: status | stdout_len | stderr_len | stdout | stderr
 
 ## 3.1 경제성
 
-전체 소스는 5,629줄로 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
+전체 소스는 6,913줄로 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
 
 
 ## 3.2 안정성
 
-모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 94개 테스트를 통과했다.
+모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 94개 기능 테스트와 32개 확장 테스트를 통과했다.
 
 
 ## 3.3 생산성
@@ -410,6 +428,19 @@ netserv는 getaddrinfo/socket/bind/listen/accept로 서버를 열고, 접속마�
 원격 명령은 별도 셸 상태에서 실행되며 stdin은 /dev/null로 연결한다. 따라서 cat처럼 입력을 기다리는 명령이 서버를 멈추지 않는다. 백그라운드 연산자(&)는 원격 세션에서 거부하고, 파이프와 재지향은 그대로 사용할 수 있다.
 
 
+## 4.9 확장 기능 구현
+
+| 기능 | 구현 위치 | 핵심 처리 |
+|---|---|---|
+| explain | cmd_explain.c | parse_line() 결과를 pipeline/cmd/redirect 단위로 출력 |
+| && / \|\| | parser.c, execute.c | connector_t와 직전 종료 상태로 실행/건너뜀 |
+| glob | parser.c | 인용되지 않은 *, ?, []를 glob(3)으로 확장 |
+| undo/휴지통 | cmd_trash.c, cmd_fs.c | rename/EXDEV 복사 후 매니페스트 기록, undo로 복원 |
+| serve | cmd_serve.c | GET/HEAD, 디렉터리 목록, realpath 기반 경로 탈출 차단 |
+| watch | cmd_watch.c | shell_execute_line()을 주기적으로 호출 |
+| prompt | main.c, builtin.c | 종료 코드·소요 시간·실행 중 작업 수 표시 |
+
+
 ---
 
 
@@ -437,6 +468,12 @@ netserv는 getaddrinfo/socket/bind/listen/accept로 서버를 열고, 접속마�
 | cat | 완료 | -n, -b, -E, -T, 다중 파일 |
 | grep | 완료 | -i, -v, -n, -c, -l, -r, -E, -F, -q |
 | netserv/netcli | 완료 | 토큰 인증, 원격 파이프/재지향, 동시 접속, 타임아웃 |
+| && / \|\| | 완료 | 연결자별 실행/건너뜀, 종료 상태 유지 |
+| glob | 완료 | 인용되지 않은 *, ?, [] 확장 |
+| explain | 완료 | 파이프·재지향·백그라운드 도식 출력 |
+| undo / 휴지통 | 완료 | rm/mv/cp -f 복원, EXDEV 처리 |
+| serve | 완료 | GET/HEAD, 디렉터리 목록, ../ 차단 |
+| watch / prompt | 완료 | 주기 실행, 확장 프롬프트 |
 
 다음은 실제 실행 예시이다.
 
@@ -467,13 +504,13 @@ shell> exit
 
 ## 5.2 프로젝트 완성도 평가
 
-기능 테스트 94개, 네트워크 테스트 23개, 파일 입력 테스트 4개가 모두 통과했고, PTY 시그널 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.
+기능 테스트 94개, 확장 테스트 32개, 네트워크 테스트 23개, 파일 입력 테스트 4개가 모두 통과했고, PTY 시그널 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.
 
 | 제외 기능 | 이유 | 영향 |
 |---|---|---|
-| glob(*, ?) 확장 | 과제 필수 범위가 아니며, 패턴 매칭 라이브러리 추가 필요 | ls *.c 같은 입력은 외부 명령에 그대로 전달 |
-| &&, \|\| | 필수 범위 아님. 문법 오류로 안전하게 거부 | 조건부 실행 불가 |
 | 1>&2 | 2>&1만 지원. 반대 방향 fd 복제는 미지원 | 일부 스크립트 호환성 제한 |
+| undo 범위 | 마지막 한 건만 복원 | 여러 작업 연속 복원 불가 |
+| serve 인증 | HTTP 서버는 별도 인증 없음. 기본 127.0.0.1 바인딩 | 외부 공개 시 주의 |
 | 원격 cd | 원격 명령을 명령마다 자식 프로세스에서 실행 | cd가 다음 원격 명령에 유지되지 않음 |
 | fg, bg | SIGTSTP 일시정지 모델을 사용하지 않음 | 중단된 작업 재개 불가 |
 | 명령 치환 $(...) | 필수 범위 아님 | 명령 결과를 인자로 사용 불가 |
@@ -483,11 +520,11 @@ shell> exit
 
 | 주차 | 계획 | 실제 수행 | 평가 |
 |---|---|---|---|
-| 11주 | 주제 선정, 요구사항 분석, 설계 | 교재 357쪽 분석, R1~R5 분해, 모듈/자료구조 설계 | 계획대로 |
+| 11주 | 주제 선정, 요구사항 분석, 설계 | 교재 357쪽 분석, R1~R8 분해, 모듈/자료구조 설계 | 계획대로 |
 | 12주 | 파서/실행기 구현 | 따옴표·변수 확장, 파이프·재지향, 내장 명령 디스패치 | 계획대로 |
 | 13주 | 시그널/작업 제어 | 프로세스 그룹, tcsetpgrp, VQUIT 매핑, jobs/wait | 계획대로 |
 | 14주 | 11개 명령 구현 및 통합 | 파일/텍스트 명령, 94개 기능 테스트, ASan 검증 | 테스트 보강으로 일부 지연 |
-| 15주 | 네트워크 확장, 보고서/GitHub 정리 | netserv/netcli, 23개 네트워크 테스트, HWP/PDF 보고서 | 15주 내 완료 |
+| 15주 | 확장 기능, 보고서/GitHub 정리 | netserv/netcli, explain, undo, serve, watch, 59개 추가 테스트 | 15주 내 완료 |
 
 14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 보강했고, 15주차에 원격 쉘 확장과 네트워크 테스트를 추가했다.
 
@@ -496,8 +533,8 @@ shell> exit
 
 | 팀원 | 학번 | GitHub | 담당 업무 | 기여도 |
 |---|---|---|---|---|
-| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), netserv 서버·프로토콜, pwd, cd, ls, mkdir, rmdir | 50% |
-| 강동우 | 20223080 | pizza0420 | netcli 클라이언트, ln, cp, rm, mv, cat, grep, 네트워크/기능 테스트, 문서 | 50% |
+| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), explain, netserv 서버, serve, pwd, cd, ls, mkdir, rmdir | 50% |
+| 강동우 | 20223080 | pizza0420 | netcli, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 확장/기능 테스트, 문서 | 50% |
 
 류동엽은 쉘 코어와 netserv, 강동우는 파일/텍스트 명령과 netcli·테스트를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.
 
@@ -515,6 +552,8 @@ shell> exit
 | 원격 명령 무한 대기 | 서버 자원 고갈 | poll 기반 타임아웃, 프로세스 그룹 SIGKILL | sleep 5 → 1초 타임아웃 확인 |
 | 외부 노출 | 무단 원격 명령 실행 | 기본 127.0.0.1, 비루프백 주소는 토큰 필수 | 인증 성공/실패 테스트 |
 | 출력 폭주 | 메모리 고갈 | stdout/stderr 1MiB 제한, 초과분 폐기 | 출력 제한 코드 적용 |
+| HTTP 경로 탈출 | 문서 루트 밖 파일 노출 | realpath + 문서 루트 prefix 검사, ../ 차단 | curl ../etc/passwd → 403 |
+| 휴지통 증가 | 홈 디렉터리 사용량 증가 | 필요 시 ~/.myshell_trash 수동 정리, rm --no-trash 제공 | 테스트에서 동작 확인 |
 
 
 ## 5.6 GitHub 저장소와 라이선스
@@ -535,7 +574,7 @@ shell> exit
 
 ## 강동우
 
-cp/rm의 재귀 처리와 grep 옵션을 구현하면서 심볼릭 링크, EXDEV, 종료 상태 같은 경계 조건을 정리했다. 94개 기능 테스트와 23개 네트워크 테스트를 작성해 변경 사항을 확인했다.
+cp/rm의 재귀 처리와 grep 옵션을 구현하면서 심볼릭 링크, EXDEV, 종료 상태 같은 경계 조건을 정리했다. 94개 기능 테스트, 32개 확장 테스트, 23개 네트워크 테스트를 작성해 변경 사항을 확인했다.
 
 
 ## 함께
@@ -595,7 +634,8 @@ python3 tests/test_signals.py
 |---|---|---|
 | 네트워크 | 인증 성공/실패, 원격 파이프/재지향, 동시 접속, 타임아웃 | 23 |
 | 파일 입력 | 여러 줄 스크립트, 마지막 줄 중복, 백그라운드 혼합 | 4 |
-| 시그널 | PTY에서 Ctrl-C/Ctrl-Z 6개 시나리오 | 6 |
+| 확장 | explain, &&/\|\|, glob, undo/휴지통, serve, watch | 32 |
+| 시그널 | PTY에서 Ctrl-C/Ctrl-Z 및 확장 프롬프트 | 6 |
 
 make test는 위 테스트를 모두 실행한다.
 
@@ -604,18 +644,22 @@ make test는 위 테스트를 모두 실행한다.
 
 | 파일 | 줄 수 | 비고 |
 |---|---|---|
-| include/myshell.h | 235 | 공용 선언 |
-| src/main.c | 391 | REPL/시그널/터미널 |
-| src/parser.c | 715 | 토큰화/확장/문법 |
-| src/execute.c | 358 | fork/pipe/redirection/wait |
+| include/myshell.h | 254 | 공용 선언 |
+| src/main.c | 419 | REPL/시그널/터미널 |
+| src/parser.c | 797 | 토큰화/확장/문법 |
+| src/execute.c | 369 | fork/pipe/redirection/wait |
 | src/jobs.c | 154 | 백그라운드 작업 |
-| src/builtin.c | 527 | 내장 명령 |
+| src/builtin.c | 557 | 내장 명령 |
 | src/cmd_ls.c | 370 | ls |
-| src/cmd_fs.c | 929 | mkdir/rmdir/ln/cp/rm/mv |
+| src/cmd_fs.c | 952 | mkdir/rmdir/ln/cp/rm/mv |
 | src/cmd_text.c | 469 | cat/grep |
 | src/cmd_net.c | 953 | netserv/netcli |
+| src/cmd_explain.c | 111 | explain |
+| src/cmd_trash.c | 311 | undo/trash |
+| src/cmd_serve.c | 544 | serve |
+| src/cmd_watch.c | 125 | watch |
 | src/util.c | 528 | 공통 유틸 |
-| 합계 | 5,629 | 헤더 포함 |
+| 합계 | 6,913 | 헤더 포함 |
 
 
 # 부록 D. 참고문헌

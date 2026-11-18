@@ -27,6 +27,7 @@ test: $(TARGET)
 	./tests/run_tests.sh
 	./tests/test_net.sh
 	./tests/test_file_input.sh
+	./tests/test_ext.sh
 	python3 tests/test_signals.py
 
 install: $(TARGET)

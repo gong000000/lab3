@@ -100,6 +100,11 @@ static const builtin_entry_t builtins[] = {
     { "grep",   b_grep,         0 },
     { "netserv", cmd_netserv,   0 },
     { "netcli",  cmd_netcli,    0 },
+    { "explain", cmd_explain,   0 },
+    { "undo",    cmd_undo,      0 },
+    { "serve",   cmd_serve,     0 },
+    { "watch",   cmd_watch,     0 },
+    { "prompt",  cmd_prompt,    1 },
 };
 
 static const builtin_entry_t *find_builtin(const char *name)
@@ -498,7 +503,12 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  cd pwd echo exit jobs wait export unset help true false\n");
     printf("  ls mkdir rmdir ln cp rm mv cat grep\n");
     printf("  netserv [-p PORT] [-a ADDR] [-s TOKEN] [-t SEC] [-1]\n");
-    printf("  netcli [-p PORT] [-s TOKEN] [-t SEC] [-i] HOST [COMMAND...]\n\n");
+    printf("  netcli [-p PORT] [-s TOKEN] [-t SEC] [-i] HOST [COMMAND...]\n");
+    printf("  explain 'command line'\n");
+    printf("  undo\n");
+    printf("  serve [-p PORT] [-d DIR] [-a ADDR] [-1]\n");
+    printf("  watch [-n SEC] [-c COUNT] COMMAND...\n");
+    printf("  prompt [on|off]\n\n");
     printf("Examples:\n");
     printf("  netserv -1 -p 9090 &\n");
     printf("  netcli -p 9090 127.0.0.1 echo hello\n");
@@ -524,4 +534,24 @@ int builtin_false(int argc, char **argv, shell_state_t *sh)
     (void)argv;
     (void)sh;
     return 1;
+}
+
+int cmd_prompt(int argc, char **argv, shell_state_t *sh)
+{
+    if (argc > 2) {
+        msh_usage("prompt [on|off]");
+        return 2;
+    }
+    if (argc == 2) {
+        if (strcmp(argv[1], "on") == 0)
+            sh->show_prompt_info = 1;
+        else if (strcmp(argv[1], "off") == 0)
+            sh->show_prompt_info = 0;
+        else {
+            msh_usage("prompt [on|off]");
+            return 2;
+        }
+    }
+    printf("prompt: %s\n", sh->show_prompt_info ? "on" : "off");
+    return 0;
 }

@@ -32,6 +32,8 @@
 typedef enum {
     TOK_WORD = 0,
     TOK_PIPE,
+    TOK_AND_IF,         /* && */
+    TOK_OR_IF,          /* || */
     TOK_SEMI,
     TOK_AMP,
     TOK_IN,             /* <  */
@@ -48,6 +50,7 @@ typedef enum {
 typedef struct {
     token_type_t type;
     char *text;         /* only for TOK_WORD */
+    int glob;           /* expand unquoted *, ?, [...] */
 } token_t;
 
 typedef struct {
@@ -73,8 +76,15 @@ typedef struct {
     char *text;         /* printable form, used by jobs/wait */
 } pipeline_t;
 
+typedef enum {
+    CONN_ALWAYS = 0,    /* ; or first command */
+    CONN_AND,           /* && */
+    CONN_OR             /* || */
+} connector_t;
+
 typedef struct {
     pipeline_t *pipelines;
+    connector_t *connectors;  /* one per pipeline; first is ALWAYS */
     int npipelines;
 } command_list_t;
 
@@ -101,6 +111,8 @@ typedef struct shell_state {
     int should_exit;
     int exit_status;
     int last_status;    /* $? */
+    double last_duration;  /* seconds */
+    int show_prompt_info;
     pid_t shell_pid;
     pid_t shell_pgid;
     pid_t last_bg_pid;  /* $! */
@@ -137,6 +149,13 @@ void reset_child_signals(void);
 /* Execute one command line with the shell's parser/executor.  Used by the
  * network extension (netserv) to run a command received over TCP. */
 int shell_execute_line(const char *line, shell_state_t *sh);
+int cmd_explain(int argc, char **argv, shell_state_t *sh);
+int cmd_undo(int argc, char **argv, shell_state_t *sh);
+int cmd_serve(int argc, char **argv, shell_state_t *sh);
+int cmd_watch(int argc, char **argv, shell_state_t *sh);
+int cmd_prompt(int argc, char **argv, shell_state_t *sh);
+int trash_move(const char *path);
+int trash_move_ex(const char *path, const char *undo_extra);
 
 /* ------------------------------------------------------------------ */
 /* jobs.c                                                             */
