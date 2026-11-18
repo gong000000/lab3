@@ -16,7 +16,9 @@
 | 재지향/파이프 | `<`, `>`, `>>`, `2>`, `2>>`, `2>&1`, `&>`, `&>>`, 다단 `\|` |
 | 내장 명령 | `ls`, `pwd`, `cd`, `mkdir`, `rmdir`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep` |
 | 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:` |
-| 네트워크 확장 | `netserv`(TCP 서버), `netcli`(클라이언트), 토큰 인증, 동시 접속, 타임아웃 |
+| 네트워크 확장 | `netserv`(TCP 서버), `netcli`(클라이언트), HMAC 챌린지-응답 인증, 동시 접속, 타임아웃 |
+| 원격 관전 | `netcli -w`로 서버에서 실행되는 명령/상태를 읽기 전용으로 확인 |
+| 파이프 계측 | `pipestat 'cmd1 | cmd2'`로 단계별 바이트·시간·종료 코드 출력 |
 | 조건부 실행 | `&&`, `||` |
 | glob | `*`, `?`, `[...]` (인용되지 않은 경우) |
 | 파서 시각화 | `explain '명령줄'` |
@@ -307,6 +309,9 @@ shell> echo $?
 shell> wait
 ```
 
+HMAC 챌린지-응답 인증을 사용하므로 토큰 자체는 네트워크로 전송되지 않습니다.
+`netcli -w`는 서버에서 실행되는 명령과 상태를 읽기 전용으로 보여 줍니다.
+
 대화형 클라이언트:
 
 ```text
@@ -396,7 +401,30 @@ prompt: off
 shell>
 ```
 
-#### (9) 테스트 실행
+#### (9) pipestat, 원격 관전
+
+```text
+shell> pipestat 'echo hello | cat | wc -c'
+6
+
+[1] echo hello: 6 bytes, 0.000s, status 0
+[2] cat: 6 bytes, 0.000s, status 0
+[3] wc -c: 2 bytes, 0.003s, status 0
+```
+
+```text
+shell> netserv -n 2 -p 9095 &
+shell> sleep 0.3
+shell> netcli -w -t 2 -p 9095 127.0.0.1 > watch.log &
+shell> sleep 0.3
+shell> netcli -p 9095 127.0.0.1 'echo watched-command'
+watched-command
+shell> wait
+shell> cat watch.log
+[22:00:58] status=0 cmd=echo watched-command
+```
+
+#### (10) 테스트 실행
 
 ```bash
 make test
@@ -414,8 +442,10 @@ Network tests failed: 0
 File-input tests passed: 4
 File-input tests failed: 0
 ...
-Extension tests passed: 32
+Extension tests passed: 37
 Extension tests failed: 0
+...
+SHA-256/HMAC tests passed
 ...
 SIGNAL TEST PASSED
 ```
@@ -423,9 +453,10 @@ SIGNAL TEST PASSED
 테스트 스크립트:
 
 - `tests/run_tests.sh`: 94개 기능 테스트
-- `tests/test_net.sh`: 23개 네트워크 테스트
+- `tests/test_net.sh`: 25개 네트워크 테스트
 - `tests/test_file_input.sh`: 4개 파일 입력 테스트
-- `tests/test_ext.sh`: 32개 확장 테스트
+- `tests/test_ext.sh`: 37개 확장 테스트
+- `tests/test_sha256.c`: SHA-256/HMAC 벡터 테스트
 - `tests/test_signals.py`: PTY 시그널/프롬프트 테스트
 
 ### 2.6 스크린샷 체크리스트
@@ -450,6 +481,8 @@ SIGNAL TEST PASSED
 | `16_undo.png` | rm 후 undo | `echo keep > u.txt; rm u.txt; undo; cat u.txt` |
 | `17_serve.png` | HTTP 서버 | `serve -1 -p 8080 -d . &` + `curl` |
 | `18_watch_prompt.png` | watch와 확장 프롬프트 | `watch -n 1 -c 2 echo hi`, `prompt on` |
+| `19_pipestat.png` | 파이프 계측 | `pipestat 'echo hi \| cat \| wc -c'` |
+| `20_net_watch.png` | 원격 관전 | `netcli -w -t 2 -p 9095 127.0.0.1` |
 
 캡처 팁:
 
@@ -488,17 +521,20 @@ SIGNAL TEST PASSED
 │   ├── cmd_ls.c           ls
 │   ├── cmd_fs.c           mkdir, rmdir, ln, cp, rm, mv
 │   ├── cmd_text.c         cat, grep
-│   ├── cmd_net.c          netserv, netcli
+│   ├── cmd_net.c          netserv, netcli, HMAC, watcher
+│   ├── cmd_pipestat.c     파이프 계측
 │   ├── cmd_explain.c      파서 결과 시각화
 │   ├── cmd_trash.c        휴지통과 undo
 │   ├── cmd_serve.c        HTTP 파일 서버
 │   ├── cmd_watch.c        주기 실행
+│   ├── sha256.c           SHA-256/HMAC
 │   └── util.c             공용 유틸
 ├── tests/
 │   ├── run_tests.sh
 │   ├── test_net.sh
 │   ├── test_file_input.sh
 │   ├── test_ext.sh
+│   ├── test_sha256.c
 │   ├── test_signals.py
 │   └── manual_test.sh
 └── docs/
@@ -529,6 +565,7 @@ SIGNAL TEST PASSED
 | `serve` | `-p PORT`, `-d DIR`, `-a ADDR`, `-1` |
 | `watch` | `-n SEC`, `-c COUNT` |
 | `prompt` | `on`, `off` |
+| `pipestat` | `pipestat 'cmd1 | cmd2'` |
 
 ## 5. 제약
 
@@ -545,8 +582,8 @@ SIGNAL TEST PASSED
 
 | 팀원 | 학번 | GitHub | 담당 |
 |---|---|---|---|
-| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), `explain`, `netserv`, `serve`, `pwd`, `cd`, `ls`, `mkdir`, `rmdir` |
-| 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `netcli`, `undo`/휴지통, `watch`, `prompt`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep`, 테스트/문서 |
+| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), `explain`, `netserv`, HMAC, `serve`, `pwd`, `cd`, `ls`, `mkdir`, `rmdir` |
+| 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `netcli`/watcher, `pipestat`, `undo`/휴지통, `watch`, `prompt`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep`, 테스트/문서 |
 
 ## 7. 보고서 재생성
 

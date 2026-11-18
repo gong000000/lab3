@@ -10,10 +10,12 @@
  *   response: status | stdout_len | stderr_len | stdout | stderr
  */
 #include "myshell.h"
+#include "sha256.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -93,45 +95,121 @@ static int recv_u32(int fd, uint32_t *value)
     return 0;
 }
 
-static int read_request(int fd, char *token, size_t token_size,
-                        char *command, size_t command_size)
+static int read_request(int fd, char *command, size_t command_size)
 {
     char magic[4];
-    uint32_t token_len, command_len;
+    uint32_t command_len;
 
     if (recv_all(fd, magic, sizeof(magic)) < 0)
         return -1;
     if (memcmp(magic, "MSH1", 4) != 0)
         return -2;
-    if (recv_u32(fd, &token_len) < 0 || recv_u32(fd, &command_len) < 0)
+    if (recv_u32(fd, &command_len) < 0)
         return -1;
-    if (token_len >= token_size || command_len >= command_size)
+    if (command_len >= command_size)
         return -3;
-    if (recv_all(fd, token, token_len) < 0)
-        return -1;
-    token[token_len] = '\0';
     if (recv_all(fd, command, command_len) < 0)
         return -1;
     command[command_len] = '\0';
     return 0;
 }
 
-static int send_request(int fd, const char *token, const char *command)
+static int send_request(int fd, const char *command)
 {
-    size_t token_len = strlen(token);
     size_t command_len = strlen(command);
 
-    if (token_len > NET_MAX_TOKEN || command_len > NET_MAX_COMMAND)
+    if (command_len > NET_MAX_COMMAND)
         return -1;
     if (send_all(fd, "MSH1", 4) < 0)
         return -1;
-    if (send_u32(fd, (uint32_t)token_len) < 0 ||
-        send_u32(fd, (uint32_t)command_len) < 0)
-        return -1;
-    if (token_len > 0 && send_all(fd, token, token_len) < 0)
+    if (send_u32(fd, (uint32_t)command_len) < 0)
         return -1;
     if (command_len > 0 && send_all(fd, command, command_len) < 0)
         return -1;
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Challenge-response authentication (HMAC-SHA256)                    */
+/* ------------------------------------------------------------------ */
+
+static void make_nonce(unsigned char nonce[16])
+{
+    int fd = open("/dev/urandom", O_RDONLY);
+
+    if (fd >= 0) {
+        ssize_t got = read(fd, nonce, 16);
+        close(fd);
+        if (got == 16)
+            return;
+    }
+    {
+        uint64_t seed = (uint64_t)time(NULL) ^ (uint64_t)getpid();
+        size_t i;
+
+        for (i = 0; i < 16; ++i) {
+            seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+            nonce[i] = (unsigned char)(seed >> 33);
+        }
+    }
+}
+
+static int constant_time_equal(const unsigned char *a,
+                               const unsigned char *b, size_t len)
+{
+    unsigned char diff = 0;
+    size_t i;
+
+    for (i = 0; i < len; ++i)
+        diff |= (unsigned char)(a[i] ^ b[i]);
+    return diff == 0;
+}
+
+static int handshake_server(int fd, const char *token)
+{
+    unsigned char nonce[16];
+    unsigned char mac[32];
+    unsigned char expected[32];
+
+    make_nonce(nonce);
+    if (send_all(fd, "MSH2", 4) < 0 ||
+        send_all(fd, nonce, sizeof(nonce)) < 0)
+        return -1;
+    if (recv_all(fd, mac, sizeof(mac)) < 0)
+        return -1;
+    hmac_sha256((const uint8_t *)token, strlen(token), nonce, sizeof(nonce),
+                expected);
+    if (!constant_time_equal(mac, expected, sizeof(mac))) {
+        (void)send_all(fd, "DENY", 4);
+        return -1;
+    }
+    if (send_all(fd, "OKAY", 4) < 0)
+        return -1;
+    return 0;
+}
+
+static int handshake_client(int fd, const char *token)
+{
+    char magic[4];
+    unsigned char nonce[16];
+    unsigned char mac[32];
+    char result[4];
+
+    if (recv_all(fd, magic, sizeof(magic)) < 0 ||
+        memcmp(magic, "MSH2", 4) != 0)
+        return -1;
+    if (recv_all(fd, nonce, sizeof(nonce)) < 0)
+        return -1;
+    hmac_sha256((const uint8_t *)token, strlen(token), nonce, sizeof(nonce),
+                mac);
+    if (send_all(fd, mac, sizeof(mac)) < 0)
+        return -1;
+    if (recv_all(fd, result, sizeof(result)) < 0)
+        return -1;
+    if (memcmp(result, "OKAY", 4) != 0) {
+        msh_error("netcli: authentication failed");
+        return -1;
+    }
     return 0;
 }
 
@@ -473,32 +551,100 @@ static void server_reap(int sig)
     errno = saved_errno;
 }
 
-static void handle_client(int fd, shell_state_t *sh, const char *token,
-                          int timeout)
+static void append_event(const char *log_path, const char *command, int status)
 {
+    int fd;
+    char safe[200];
+    char line[512];
+    char timebuf[32];
+    struct tm tm;
+    time_t now = time(NULL);
+    size_t i;
+    int n;
+
+    if (log_path == NULL || log_path[0] == '\0')
+        return;
+    for (i = 0; command[i] != '\0' && i + 1 < sizeof(safe); ++i)
+        safe[i] = (command[i] == '\n' || command[i] == '\r') ? ' ' : command[i];
+    safe[i] = '\0';
+    localtime_r(&now, &tm);
+    strftime(timebuf, sizeof(timebuf), "%H:%M:%S", &tm);
+
+    fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    if (fd < 0)
+        return;
+    n = snprintf(line, sizeof(line), "[%s] status=%d cmd=%s\n",
+                 timebuf, status, safe);
+    if (n > 0)
+        (void)msh_write_all(fd, line, (size_t)n);
+    close(fd);
+}
+
+static void stream_watch(int fd, const char *log_path)
+{
+    int log_fd;
+    char buf[4096];
+
+    log_fd = open(log_path, O_RDONLY | O_CREAT, 0600);
+    if (log_fd < 0) {
+        (void)send_all(fd, "[watch] cannot open event log\n", 29);
+        return;
+    }
+    (void)lseek(log_fd, 0, SEEK_END);
+
     while (!server_stop) {
-        char request_token[NET_MAX_TOKEN + 1];
+        struct pollfd pfd;
+        int ready;
+        ssize_t n;
+
+        pfd.fd = fd;
+        pfd.events = POLLIN | POLLHUP | POLLERR;
+        pfd.revents = 0;
+        ready = poll(&pfd, 1, 200);
+        if (ready > 0) {
+            if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))
+                break;
+            if (pfd.revents & POLLIN) {
+                char probe;
+                ssize_t got = recv(fd, &probe, 1, MSG_PEEK);
+                if (got <= 0)
+                    break;
+            }
+        }
+        n = read(log_fd, buf, sizeof(buf));
+        if (n > 0) {
+            if (send_all(fd, buf, (size_t)n) < 0)
+                break;
+        }
+    }
+    close(log_fd);
+}
+
+static void handle_client(int fd, shell_state_t *sh, const char *token,
+                          int timeout, const char *event_log)
+{
+    if (handshake_server(fd, token) < 0)
+        return;
+
+    while (!server_stop) {
         char command[NET_MAX_COMMAND + 1];
         net_buf_t out = { 0 };
         net_buf_t err = { 0 };
         int status = 0;
-        int rc = read_request(fd, request_token, sizeof(request_token),
-                              command, sizeof(command));
+        int rc = read_request(fd, command, sizeof(command));
 
         if (rc < 0) {
             if (rc == -2 || rc == -3)
                 (void)send_error_response(fd, 400, "netserv: bad request\n");
             break;
         }
-
-        if (token[0] != '\0' && strcmp(request_token, token) != 0) {
-            (void)send_error_response(fd, 403,
-                                      "netserv: authentication failed\n");
-            break;
-        }
         if (command[0] == '\0') {
             (void)send_error_response(fd, 400, "netserv: empty command\n");
             continue;
+        }
+        if (strcmp(command, "__watch__") == 0) {
+            stream_watch(fd, event_log);
+            break;
         }
         if (has_background(command)) {
             (void)send_error_response(fd, 400,
@@ -508,6 +654,7 @@ static void handle_client(int fd, shell_state_t *sh, const char *token,
         }
 
         (void)capture_command(command, sh, timeout, &out, &err, &status);
+        append_event(event_log, command, status);
         if (send_response(fd, status, &out, &err) < 0) {
             nb_free(&out);
             nb_free(&err);
@@ -558,6 +705,7 @@ int cmd_netserv(int argc, char **argv, shell_state_t *sh)
     struct addrinfo *result = NULL;
     struct addrinfo *rp;
     char port_text[16];
+    char event_log[PATH_MAX];
 
     for (i = 1; i < argc; ++i) {
         const char *arg = argv[i];
@@ -655,6 +803,8 @@ int cmd_netserv(int argc, char **argv, shell_state_t *sh)
                         &actual_len) == 0)
             port = ntohs(actual.sin_port);
     }
+    snprintf(event_log, sizeof(event_log), "/tmp/myshell_net_%d.log", port);
+    (void)unlink(event_log);
     printf("netserv: listening on %s:%d%s%s%s\n", address, port,
            token[0] != '\0' ? " (auth)" : "",
            once ? " (once)" : "",
@@ -707,7 +857,7 @@ int cmd_netserv(int argc, char **argv, shell_state_t *sh)
             close(listen_fd);
             (void)signal(SIGCHLD, SIG_DFL);
             (void)signal(SIGPIPE, SIG_IGN);
-            handle_client(client_fd, sh, token, timeout);
+            handle_client(client_fd, sh, token, timeout, event_log);
             close(client_fd);
             _exit(0);
         }
@@ -828,6 +978,7 @@ static int is_number(const char *text)
 int cmd_netcli(int argc, char **argv, shell_state_t *sh)
 {
     int interactive = 0;
+    int watch = 0;
     int port = NET_DEFAULT_PORT;
     int timeout = NET_DEFAULT_TIMEOUT;
     const char *token = "";
@@ -848,6 +999,8 @@ int cmd_netcli(int argc, char **argv, shell_state_t *sh)
         }
         if (strcmp(arg, "-i") == 0) {
             interactive = 1;
+        } else if (strcmp(arg, "-w") == 0) {
+            watch = 1;
         } else if (strcmp(arg, "-p") == 0) {
             if (++i >= argc || parse_number(argv[i], 1, 65535, &port) < 0) {
                 msh_error("netcli: invalid port");
@@ -875,7 +1028,7 @@ int cmd_netcli(int argc, char **argv, shell_state_t *sh)
     }
 
     if (i >= argc) {
-        msh_usage("netcli [-p port] [-s token] [-t seconds] [-i] "
+        msh_usage("netcli [-p port] [-s token] [-t seconds] [-i|-w] "
                   "host [command ...]");
         return 2;
     }
@@ -890,7 +1043,16 @@ int cmd_netcli(int argc, char **argv, shell_state_t *sh)
         ++i;
     }
 
-    if (interactive) {
+    if (interactive && watch) {
+        msh_error("netcli: -i and -w cannot be combined");
+        return 2;
+    }
+    if (watch) {
+        if (i < argc) {
+            msh_error("netcli: -w does not take a command");
+            return 2;
+        }
+    } else if (interactive) {
         if (i < argc) {
             msh_error("netcli: -i does not take a command");
             return 2;
@@ -908,6 +1070,30 @@ int cmd_netcli(int argc, char **argv, shell_state_t *sh)
     if (fd < 0) {
         free(command);
         return 1;
+    }
+    if (handshake_client(fd, token) < 0) {
+        close(fd);
+        free(command);
+        return 147;
+    }
+
+    if (watch) {
+        char buf[4096];
+        if (send_request(fd, "__watch__") < 0) {
+            msh_error("netcli: watch request failed");
+            close(fd);
+            return 1;
+        }
+        for (;;) {
+            ssize_t n = recv(fd, buf, sizeof(buf), 0);
+            if (n > 0)
+                fwrite(buf, 1, (size_t)n, stdout);
+            else
+                break;
+        }
+        fflush(stdout);
+        close(fd);
+        return 0;
     }
 
     if (interactive) {
@@ -931,7 +1117,7 @@ int cmd_netcli(int argc, char **argv, shell_state_t *sh)
                 break;
             if (line[0] == '\0')
                 continue;
-            if (send_request(fd, token, line) < 0 ||
+            if (send_request(fd, line) < 0 ||
                 recv_response(fd, &status) < 0) {
                 msh_error("netcli: connection lost");
                 break;
@@ -940,7 +1126,7 @@ int cmd_netcli(int argc, char **argv, shell_state_t *sh)
         free(line);
         status = 0;
     } else {
-        if (send_request(fd, token, command) < 0 ||
+        if (send_request(fd, command) < 0 ||
             recv_response(fd, &status) < 0) {
             msh_error("netcli: request failed");
             status = 1;

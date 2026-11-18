@@ -154,6 +154,7 @@ int cmd_undo(int argc, char **argv, shell_state_t *sh);
 int cmd_serve(int argc, char **argv, shell_state_t *sh);
 int cmd_watch(int argc, char **argv, shell_state_t *sh);
 int cmd_prompt(int argc, char **argv, shell_state_t *sh);
+int cmd_pipestat(int argc, char **argv, shell_state_t *sh);
 int trash_move(const char *path);
 int trash_move_ex(const char *path, const char *undo_extra);
 

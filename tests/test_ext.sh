@@ -104,6 +104,16 @@ run 'echo permanent > p.txt; rm --no-trash p.txt; test ! -e p.txt'
 status_is 0 "rm --no-trash"
 
 # ------------------------------------------------------------------
+echo "== pipestat =="
+run "pipestat 'echo hello | cat | wc -c'"
+status_is 0 "pipestat status"
+stdout_has "[1] echo hello: 6 bytes" "pipestat stage 1 bytes"
+stdout_has "[3] wc -c" "pipestat stage 3"
+run "pipestat 'echo hello | grep zzz'"
+status_is 1 "pipestat failure status"
+stdout_has "status 1" "pipestat failure report"
+
+# ------------------------------------------------------------------
 echo "== serve =="
 mkdir -p www/sub
 echo hello-http > www/index.txt

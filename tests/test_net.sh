@@ -128,6 +128,25 @@ check_contains "$ERR" "background jobs are not supported" "background rejection"
 check_contains "$OUT" "rc=144" "background rejection status"
 
 # ------------------------------------------------------------------
+echo "== netcli -w: read-only watcher =="
+PORT=$((BASE + 8))
+cat > "$SCRIPT" <<EOF
+netserv -n 2 -p $PORT &
+sleep 0.5
+netcli -w -t 2 -p $PORT 127.0.0.1 > "$WORK/watch.log" 2>&1 &
+sleep 0.4
+netcli -p $PORT 127.0.0.1 'echo watched-command'
+wait
+EOF
+run_script
+check_status 0 "watcher server status"
+if grep -Fq "status=0 cmd=echo watched-command" "$WORK/watch.log"; then
+    pass
+else
+    fail "watcher event log"
+fi
+
+# ------------------------------------------------------------------
 echo "== netserv: concurrent clients =="
 PORT=$((BASE + 6))
 cat > "$SCRIPT" <<EOF

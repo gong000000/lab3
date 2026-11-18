@@ -105,6 +105,7 @@ static const builtin_entry_t builtins[] = {
     { "serve",   cmd_serve,     0 },
     { "watch",   cmd_watch,     0 },
     { "prompt",  cmd_prompt,    1 },
+    { "pipestat", cmd_pipestat,  0 },
 };
 
 static const builtin_entry_t *find_builtin(const char *name)
@@ -508,7 +509,8 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  undo\n");
     printf("  serve [-p PORT] [-d DIR] [-a ADDR] [-1]\n");
     printf("  watch [-n SEC] [-c COUNT] COMMAND...\n");
-    printf("  prompt [on|off]\n\n");
+    printf("  prompt [on|off]\n");
+    printf("  pipestat 'command1 | command2'\n\n");
     printf("Examples:\n");
     printf("  netserv -1 -p 9090 &\n");
     printf("  netcli -p 9090 127.0.0.1 echo hello\n");

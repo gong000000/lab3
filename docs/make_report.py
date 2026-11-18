@@ -71,7 +71,8 @@ BLOCKS: list[tuple] = [
          ["필수 기능", "exit, 백그라운드(&), SIGINT/SIGQUIT, 재지향(>, <), 파이프(|)"],
          ["필수 내장 명령", "ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep"],
          ["추가 내장 명령", "echo, export, unset, jobs, wait, help, true, false, :"],
-         ["네트워크 확장", "netserv(원격 쉘 서버), netcli(원격 쉘 클라이언트)"],
+         ["네트워크 확장", "netserv/netcli, HMAC 챌린지-응답 인증, netcli -w 관전"],
+         ["계측", "pipestat(단계별 바이트·시간·종료 코드)"],
          ["파서/문법 확장", "&&, ||, glob(*, ?, []), explain(파서 시각화)"],
          ["편의 기능", "undo/휴지통, serve(HTTP), watch(주기 실행), prompt(확장 프롬프트)"],
          ["추가 문법", ">>, 2>, 2>>, 2>&1, &>, &>>, 다단 파이프, 세미콜론(;), 따옴표, 변수 확장"],
@@ -92,20 +93,21 @@ BLOCKS: list[tuple] = [
      ]),
 
     ("h2", "1.5 결과 요약"),
-    ("p", "최종 프로그램은 총 6,913줄의 C 소스(헤더 포함)로 구성되며, 11개 필수 "
+    ("p", "최종 프로그램은 총 7,636줄의 C 소스(헤더 포함)로 구성되며, 11개 필수 "
           "내장 명령과 9개 보조 내장 명령, TCP 원격 쉘을 제공한다. 기능 테스트 "
-          "94개, 확장 테스트 32개, 네트워크 테스트 23개, 파일 입력 테스트 4개와 PTY 시그널 "
+          "94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 4개와 PTY 시그널 "
           "테스트를 통과했고, ASan/UBSan 빌드에서도 기능 테스트를 통과했다. "
           "저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다."),
     ("table",
      ["항목", "결과"],
      [
-         ["소스 규모", "헤더 포함 6,913줄 (설계 지침 1,000~10,000줄 충족)"],
+         ["소스 규모", "헤더 포함 7,636줄 (설계 지침 1,000~10,000줄 충족)"],
          ["필수 내장 명령", "ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개)"],
          ["보조 내장 명령", "echo, export, unset, jobs, wait, help, true, false, : (9개)"],
          ["기능 테스트", "94 / 94 통과"],
-         ["확장 테스트", "32 / 32 통과 (explain·&&/||·glob·undo·serve·watch)"],
-         ["네트워크 테스트", "23 / 23 통과 (인증·동시 접속·타임아웃·원격 파이프)"],
+         ["확장 테스트", "37 / 37 통과 (explain·&&/||·glob·undo·serve·watch)"],
+         ["네트워크 테스트", "25 / 25 통과 (HMAC·watcher·동시 접속·타임아웃·원격 파이프)"],
+         ["계측 테스트", "pipestat 단계별 바이트/시간/종료 코드, SHA-256/HMAC 벡터"],
          ["시그널 테스트", "PTY에서 Ctrl-C/Ctrl-Z 후 쉘 생존 확인"],
          ["문서/배포", "README, MIT LICENSE, HWP/PDF 보고서, 테스트 스크립트"],
      ]),
@@ -149,6 +151,10 @@ BLOCKS: list[tuple] = [
           "rm/mv/cp -f 대상을 휴지통으로 이동하고 undo로 복원. serve(HTTP), "
           "watch, prompt on/off 추가.",
           "undo 복원, HTTP GET/ traversal 차단, watch 실행, 프롬프트 테스트"],
+         ["R9", "계측/보안 확장",
+          "pipestat로 파이프 단계별 바이트·시간·종료 코드를 출력하고, "
+          "netserv 토큰 인증을 HMAC 챌린지-응답으로 교체. netcli -w 관전 추가.",
+          "pipestat 수치, SHA-256/HMAC 벡터, watcher 이벤트 확인"],
      ]),
 
     ("pagebreak",),
@@ -191,20 +197,22 @@ BLOCKS: list[tuple] = [
     ("table",
      ["파일", "역할", "줄 수"],
      [
-         ["include/myshell.h", "공용 상수, 구조체, 함수 원형", "254"],
+         ["include/myshell.h", "공용 상수, 구조체, 함수 원형", "255"],
          ["src/main.c", "REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화", "419"],
          ["src/parser.c", "토큰화, 따옴표/변수/틸드 확장, &&/||/glob, 파이프라인/재지향 문법", "797"],
          ["src/execute.c", "fork/exec, 파이프, dup2, 전경/백그라운드 대기", "369"],
          ["src/jobs.c", "백그라운드 job 테이블, 좀비 회수, 종료 시 SIGHUP", "154"],
-         ["src/builtin.c", "내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/prompt", "557"],
+         ["src/builtin.c", "내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/prompt", "559"],
          ["src/cmd_ls.c", "ls (-a, -l, -R, -h)", "370"],
          ["src/cmd_fs.c", "mkdir, rmdir, ln, cp, rm, mv (휴지통 연동)", "952"],
          ["src/cmd_text.c", "cat, grep (POSIX regex)", "469"],
-         ["src/cmd_net.c", "TCP 원격 쉘 서버/클라이언트, 인증·타임아웃·출력 캡처", "953"],
+         ["src/cmd_net.c", "TCP 원격 쉘 서버/클라이언트, HMAC·watcher·타임아웃", "1139"],
          ["src/cmd_explain.c", "파서 결과 ASCII 시각화", "111"],
          ["src/cmd_trash.c", "휴지통 이동, undo 매니페스트", "306"],
          ["src/cmd_serve.c", "HTTP GET/HEAD 파일 서버", "544"],
          ["src/cmd_watch.c", "주기 실행", "125"],
+         ["src/cmd_pipestat.c", "파이프 단계별 바이트·시간·종료 코드", "330"],
+         ["src/sha256.c", "SHA-256/HMAC", "204"],
          ["src/util.c", "메모리/경로/파일 복사·삭제/모드 출력 유틸", "528"],
      ]),
 
@@ -349,6 +357,13 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
           "루트 밖 접근을 차단한다. watch는 명령을 주기적으로 재실행하며, "
           "prompt on은 종료 코드·소요 시간·실행 중 작업 수를 프롬프트에 표시한다."),
 
+    ("h3", "2.5.7 계측과 인증 확장"),
+    ("p", "pipestat는 각 파이프 단계의 출력을 relay 프로세스로 통과시켜 바이트 수를 "
+          "세고, 단계별 시작/종료 시각과 종료 코드를 수집한다. netserv는 연결마다 "
+          "16바이트 nonce를 보내고 클라이언트가 HMAC-SHA256(token, nonce)를 "
+          "반환하는 방식으로 인증한다. 토큰은 전송되지 않는다. netcli -w는 서버의 "
+          "이벤트 로그를 읽어 명령/상태를 읽기 전용으로 보여 준다."),
+
     ("h2", "2.6 설계 구성 요소와의 대응"),
     ("table",
      ["설계 구성 요소", "본 프로젝트에서의 수행 내용"],
@@ -356,7 +371,7 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
          ["목표/기준 설정", "교재 357쪽 simplesh.c를 기준으로 5개 필수 요구사항과 11개 내장 명령, 원격 쉘 확장을 목표로 설정"],
          ["분석", "요구사항을 R1~R6으로 분해하고, 프로세스/시그널/파일 시스템/텍스트/네트워크로 나누어 분석"],
          ["제작", "parser, executor, job manager, builtin, cmd_* 모듈로 구현. Makefile로 재현 가능한 빌드 제공"],
-         ["시험", "94개 기능 + 32개 확장 + 23개 네트워크 + 4개 파일 입력 테스트 + PTY 시그널 테스트"],
+         ["시험", "94개 기능 + 37개 확장 + 25개 네트워크 + 4개 파일 입력 테스트 + PTY 시그널 테스트"],
      ]),
 
     ("pagebreak",),
@@ -365,7 +380,7 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
      ["제한 요소", "설계 기준", "본 프로젝트의 대응"],
      [
          ["경제성", "3~4인이 한 학기에 구현 가능한 1,000~10,000줄",
-          "헤더 포함 6,913줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화"],
+          "헤더 포함 7,636줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화"],
          ["안정성", "외부 환경 변화에도 지속적으로 동작",
           "오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 94개 자동 테스트, ASan/UBSan 검증"],
          ["생산성", "모든 기능이 동작하고 응용 가능",
@@ -379,7 +394,7 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
      ]),
 
     ("h2", "3.1 경제성"),
-    ("p", "전체 소스는 6,913줄로 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 "
+    ("p", "전체 소스는 7,636줄로 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 "
           "파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 "
           "병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 "
           "구축 비용도 작다."),
@@ -389,7 +404,7 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
           "포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 "
           "회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 "
           "보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan "
-          "빌드에서도 94개 기능 테스트와 32개 확장 테스트를 통과했다."),
+          "빌드에서도 94개 기능 테스트와 37개 확장 테스트를 통과했다."),
 
     ("h2", "3.3 생산성"),
     ("p", "ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q "
@@ -487,7 +502,7 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
     ("h2", "4.6 테스트 설계와 자동화"),
     ("p", "tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, "
           "stderr, 종료 상태를 기대값과 비교한다. tests/test_net.sh는 인증, 원격 "
-          "파이프/재지향, 동시 접속, 타임아웃을 23개 항목으로 확인하고, "
+          "파이프/재지향, 동시 접속, 타임아웃을 25개 항목으로 확인하고, "
           "tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 "
           "4개 항목으로 검사한다. tests/test_signals.py는 pty.fork()로 가상 "
           "터미널을 열고 Ctrl-C/Ctrl-Z 후 쉘 생존을 확인한다. 전체는 make test로 "
@@ -532,6 +547,9 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
          ["serve", "cmd_serve.c", "GET/HEAD, 디렉터리 목록, realpath 기반 경로 탈출 차단"],
          ["watch", "cmd_watch.c", "shell_execute_line()을 주기적으로 호출"],
          ["prompt", "main.c, builtin.c", "종료 코드·소요 시간·실행 중 작업 수 표시"],
+         ["pipestat", "cmd_pipestat.c", "relay 프로세스로 단계별 바이트/시간/종료 코드 수집"],
+         ["HMAC 인증", "cmd_net.c, sha256.c", "nonce + HMAC-SHA256 챌린지-응답"],
+         ["netcli -w", "cmd_net.c", "이벤트 로그를 tail해 원격 실행을 읽기 전용 관전"],
      ]),
 
     ("pagebreak",),
@@ -563,6 +581,9 @@ response: status | stdout_len | stderr_len | stdout | stderr"""),
          ["undo / 휴지통", "완료", "rm/mv/cp -f 복원, EXDEV 처리"],
          ["serve", "완료", "GET/HEAD, 디렉터리 목록, ../ 차단"],
          ["watch / prompt", "완료", "주기 실행, 확장 프롬프트"],
+         ["pipestat", "완료", "단계별 바이트/시간/종료 코드 출력"],
+         ["HMAC 인증", "완료", "nonce 기반 챌린지-응답, 토큰 미전송"],
+         ["netcli -w", "완료", "원격 명령/상태 읽기 전용 관전"],
      ]),
     ("p", "다음은 실제 실행 예시이다."),
     ("code", """shell> pwd
@@ -588,8 +609,8 @@ shell> ls -l out.txt
 shell> exit"""),
 
     ("h2", "5.2 프로젝트 완성도 평가"),
-    ("p", "기능 테스트 94개, 확장 테스트 32개, 네트워크 테스트 23개, 파일 "
-          "입력 테스트 4개가 모두 통과했고, PTY 시그널 테스트도 통과했다"
+    ("p", "기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 "
+          "입력 테스트 4개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널 테스트도 통과했다"
           "(Passed: 94, Failed: 0; SIGNAL TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능 테스트를 "
           "통과했다. 다음 기능은 설계 범위에서 제외했다."),
     ("table",
@@ -611,7 +632,7 @@ shell> exit"""),
          ["12주", "파서/실행기 구현", "따옴표·변수 확장, 파이프·재지향, 내장 명령 디스패치", "계획대로"],
          ["13주", "시그널/작업 제어", "프로세스 그룹, tcsetpgrp, VQUIT 매핑, jobs/wait", "계획대로"],
          ["14주", "11개 명령 구현 및 통합", "파일/텍스트 명령, 94개 기능 테스트, ASan 검증", "테스트 보강으로 일부 지연"],
-         ["15주", "확장 기능, 보고서/GitHub 정리", "netserv/netcli, explain, undo, serve, watch, 59개 추가 테스트", "15주 내 완료"],
+         ["15주", "확장 기능, 보고서/GitHub 정리", "netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 68개 추가 테스트", "15주 내 완료"],
      ]),
     ("p", "14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 보강했고, 15주차에 "
           "원격 쉘 확장과 네트워크 테스트를 추가했다."),
@@ -621,10 +642,10 @@ shell> exit"""),
      ["팀원", "학번", "GitHub", "담당 업무", "기여도"],
      [
          ["류동엽", "20223154", "gong000000",
-          "쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), explain, netserv 서버, serve, pwd, cd, ls, mkdir, rmdir",
+          "쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir",
           "50%"],
          ["강동우", "20223080", "pizza0420",
-          "netcli, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 확장/기능 테스트, 문서",
+          "netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 확장/기능 테스트, 문서",
           "50%"],
      ]),
     ("p", "류동엽은 쉘 코어와 netserv, 강동우는 파일/텍스트 명령과 netcli·테스트를 "
@@ -646,6 +667,8 @@ shell> exit"""),
          ["출력 폭주", "메모리 고갈", "stdout/stderr 1MiB 제한, 초과분 폐기", "출력 제한 코드 적용"],
          ["HTTP 경로 탈출", "문서 루트 밖 파일 노출", "realpath + 문서 루트 prefix 검사, ../ 차단", "curl ../etc/passwd → 403"],
          ["휴지통 증가", "홈 디렉터리 사용량 증가", "필요 시 ~/.myshell_trash 수동 정리, rm --no-trash 제공", "테스트에서 동작 확인"],
+         ["HMAC nonce 재사용", "재전송 공격 가능", "연결마다 새 nonce, 연결 종료 시 폐기", "핸드셰이크 테스트"],
+         ["watcher 로그 노출", "원격 명령 내용 노출", "기본 loopback, 이벤트 로그는 /tmp 0600", "권한/접속 테스트"],
      ]),
 
     ("h2", "5.6 GitHub 저장소와 라이선스"),
@@ -664,8 +687,8 @@ shell> exit"""),
           "확인했다. 네트워크 확장에서는 인증, 타임아웃, 출력 캡처를 구현했다."),
     ("h2", "강동우"),
     ("p", "cp/rm의 재귀 처리와 grep 옵션을 구현하면서 심볼릭 링크, EXDEV, 종료 "
-          "상태 같은 경계 조건을 정리했다. 94개 기능 테스트, 32개 확장 "
-          "테스트, 23개 네트워크 테스트를 작성해 변경 사항을 확인했다."),
+          "상태 같은 경계 조건을 정리했다. 94개 기능 테스트, 37개 확장 "
+          "테스트, 25개 네트워크 테스트를 작성해 변경 사항을 확인했다."),
     ("h2", "함께"),
     ("p", "쉘 코어와 네트워크 확장을 분리해 작업하고, make test로 통합 동작을 "
           "확인했다."),
@@ -713,9 +736,10 @@ python3 tests/test_signals.py"""),
     ("table",
      ["추가 테스트", "내용", "개수"],
      [
-         ["네트워크", "인증 성공/실패, 원격 파이프/재지향, 동시 접속, 타임아웃", "23"],
+         ["네트워크", "HMAC 인증, 원격 파이프/재지향, 동시 접속, 타임아웃, watcher", "25"],
          ["파일 입력", "여러 줄 스크립트, 마지막 줄 중복, 백그라운드 혼합", "4"],
-         ["확장", "explain, &&/||, glob, undo/휴지통, serve, watch", "32"],
+         ["보안", "SHA-256/HMAC 표준 벡터", "2"],
+         ["확장", "explain, &&/||, glob, undo/휴지통, pipestat, serve, watch", "37"],
          ["시그널", "PTY에서 Ctrl-C/Ctrl-Z 및 확장 프롬프트", "6"],
      ]),
     ("p", "make test는 위 테스트를 모두 실행한다."),
@@ -724,22 +748,24 @@ python3 tests/test_signals.py"""),
     ("table",
      ["파일", "줄 수", "비고"],
      [
-         ["include/myshell.h", "254", "공용 선언"],
+         ["include/myshell.h", "255", "공용 선언"],
          ["src/main.c", "419", "REPL/시그널/터미널"],
          ["src/parser.c", "797", "토큰화/확장/문법"],
          ["src/execute.c", "369", "fork/pipe/redirection/wait"],
          ["src/jobs.c", "154", "백그라운드 작업"],
-         ["src/builtin.c", "557", "내장 명령"],
+         ["src/builtin.c", "559", "내장 명령"],
          ["src/cmd_ls.c", "370", "ls"],
          ["src/cmd_fs.c", "952", "mkdir/rmdir/ln/cp/rm/mv"],
          ["src/cmd_text.c", "469", "cat/grep"],
-         ["src/cmd_net.c", "953", "netserv/netcli"],
+         ["src/cmd_net.c", "1139", "netserv/netcli/HMAC"],
          ["src/cmd_explain.c", "111", "explain"],
          ["src/cmd_trash.c", "311", "undo/trash"],
          ["src/cmd_serve.c", "544", "serve"],
          ["src/cmd_watch.c", "125", "watch"],
+         ["src/cmd_pipestat.c", "330", "pipestat"],
+         ["src/sha256.c", "204", "SHA-256/HMAC"],
          ["src/util.c", "528", "공통 유틸"],
-         ["합계", "6,913", "헤더 포함"],
+         ["합계", "7,636", "헤더 포함"],
      ]),
 
     ("h1", "부록 D. 참고문헌"),
