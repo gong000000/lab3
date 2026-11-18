@@ -537,7 +537,8 @@ shell> exit"""),
 
     ("h2", "5.6 GitHub 저장소와 라이선스"),
     ("p", "프로젝트는 https://github.com/gong000000/lab3 에 공개되어 있으며, "
-          "팀원 강동우(pizza0420)를 Collaborator로 등록했다. 저장소 루트에는 "
+          "팀원 강동우(pizza0420)를 Collaborator(write 권한)로 초대했다. "
+          "초대 수락 후 팀원이 직접 commit/push할 수 있다. 저장소 루트에는 "
           "MIT LICENSE가 있어 누구나 자유롭게 사용·수정·재배포할 수 있다. "
           "README에는 빌드, 실행, 테스트, 지원 옵션, 알려진 제한을 정리했다."),
 

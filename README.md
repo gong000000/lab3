@@ -149,5 +149,5 @@ python docs/make_pdf.py      # REPORT.pdf (Chrome/Edge headless)
 ## 8. GitHub 저장소 및 라이선스
 
 - 저장소: <https://github.com/gong000000/lab3>
-- 협업자: `pizza0420` (강동우) — Collaborator 등록
+- 협업자: `pizza0420` (강동우) — Collaborator(write) 초대 완료, 수락 대기
 - 라이선스: MIT License. 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
