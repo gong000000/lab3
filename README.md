@@ -150,7 +150,7 @@ shell> echo $?
 ```text
 shell> sleep 30
 ^Z
-Quit (core dumped)
+Quit
 shell> echo $?
 131
 ```
@@ -214,9 +214,9 @@ shell> echo "link test" > target.txt
 shell> ln target.txt hard.txt
 shell> ln -s target.txt sym.txt
 shell> ls -l target.txt hard.txt sym.txt
--rw-r--r-- 2 student student 10 ... hard.txt
-lrwxrwxrwx 1 student student  9 ... sym.txt -> target.txt
--rw-r--r-- 2 student student 10 ... target.txt
+-rw-r--r-- 2 gong0000 gong0000 10 ... hard.txt
+lrwxrwxrwx 1 gong0000 gong0000  9 ... sym.txt -> target.txt
+-rw-r--r-- 2 gong0000 gong0000 10 ... target.txt
 shell> cat hard.txt
 link test
 shell> cat sym.txt
@@ -327,6 +327,8 @@ client-B
 ```
 
 포트가 이미 사용 중이면 `-p` 뒤의 번호를 다른 값으로 바꿉니다.
+위 예시의 `lines.txt`는 2.5절 (4)에서 만든 파일입니다. 새 셸에서 시작했다면
+`printf 'alpha\nbeta\ngamma\n' > lines.txt`를 먼저 실행합니다.
 
 #### (7) 테스트 실행
 
