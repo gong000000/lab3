@@ -150,6 +150,10 @@ run_shell 'pwd > pwd.txt; cat pwd.txt'
 assert_status 0 "builtin output redirection"
 if [ -s pwd.txt ]; then pass; else fail "pwd redirection file empty"; fi
 
+run_shell 'ls missing2 > all.txt 2>&1'
+assert_status 1 "2>&1 status"
+assert_file_contains all.txt "missing2" "2>&1 combined file"
+
 # ------------------------------------------------------------------
 echo "== pipes =="
 run_shell 'echo -e "alpha\nbeta\ngamma" | grep beta'

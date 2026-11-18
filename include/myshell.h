@@ -39,6 +39,7 @@ typedef enum {
     TOK_OUT_APPEND,     /* >> */
     TOK_ERR,            /* 2> */
     TOK_ERR_APPEND,     /* 2>> */
+    TOK_ERR_DUP_OUT,    /* 2>&1 */
     TOK_BOTH,           /* &> */
     TOK_BOTH_APPEND,    /* &>> */
     TOK_END
@@ -55,6 +56,7 @@ typedef struct {
     int out_append;     /* nonzero for >> */
     char *err_path;     /* 2> file, 2>> file */
     int err_append;     /* nonzero for 2>> */
+    int err_to_out;     /* 2>&1 : dup stdout onto stderr */
     int merge_err;      /* &> : dup stdout onto stderr */
 } redirect_t;
 
@@ -132,6 +134,10 @@ int apply_redirections(const redirect_t *redir);
 int has_redirections(const redirect_t *redir);
 void reset_child_signals(void);
 
+/* Execute one command line with the shell's parser/executor.  Used by the
+ * network extension (netserv) to run a command received over TCP. */
+int shell_execute_line(const char *line, shell_state_t *sh);
+
 /* ------------------------------------------------------------------ */
 /* jobs.c                                                             */
 /* ------------------------------------------------------------------ */
@@ -186,6 +192,13 @@ int cmd_mv(int argc, char **argv);
 
 int cmd_cat(int argc, char **argv);
 int cmd_grep(int argc, char **argv);
+
+/* ------------------------------------------------------------------ */
+/* cmd_net.c : TCP remote shell server/client                         */
+/* ------------------------------------------------------------------ */
+
+int cmd_netserv(int argc, char **argv, shell_state_t *sh);
+int cmd_netcli(int argc, char **argv, shell_state_t *sh);
 
 /* ------------------------------------------------------------------ */
 /* util.c                                                             */

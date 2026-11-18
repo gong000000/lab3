@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdio_ext.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -15,7 +16,7 @@
 int has_redirections(const redirect_t *redir)
 {
     return redir->in_path != NULL || redir->out_path != NULL ||
-           redir->err_path != NULL || redir->merge_err;
+           redir->err_path != NULL || redir->err_to_out || redir->merge_err;
 }
 
 int apply_redirections(const redirect_t *redir)
@@ -75,6 +76,11 @@ int apply_redirections(const redirect_t *redir)
         }
         if (fd != STDERR_FILENO)
             close(fd);
+    }
+
+    if (redir->err_to_out && dup2(STDOUT_FILENO, STDERR_FILENO) < 0) {
+        msh_perror("dup2");
+        return -1;
     }
 
     return 0;
@@ -145,7 +151,8 @@ static int run_parent_builtin(command_t *cmd, shell_state_t *sh)
     }
 
     rc = run_builtin(cmd->argc, cmd->argv, sh, 0);
-    fflush(NULL);
+    fflush(stdout);
+    fflush(stderr);
 
     if (redirected) {
         for (i = 0; i < 3; ++i) {
@@ -212,6 +219,7 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh)
 
             (void)setpgid(0, child_pgid);
             reset_child_signals();
+            __fpurge(stdin);
 
             if (prev_read != -1) {
                 if (dup2(prev_read, STDIN_FILENO) < 0) {
@@ -234,7 +242,8 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh)
 
             if (is_builtin(cmd->argv[0])) {
                 int rc = run_builtin(cmd->argc, cmd->argv, sh, 1);
-                fflush(NULL);
+                fflush(stdout);
+                fflush(stderr);
                 _exit(rc);
             }
 

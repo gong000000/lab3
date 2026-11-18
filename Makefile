@@ -25,6 +25,9 @@ $(BUILDDIR):
 
 test: $(TARGET)
 	./tests/run_tests.sh
+	./tests/test_net.sh
+	./tests/test_file_input.sh
+	python3 tests/test_signals.py
 
 install: $(TARGET)
 	install -d $(DESTDIR)/usr/local/bin

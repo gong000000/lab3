@@ -115,6 +115,7 @@ static int match_operator(const char *p, token_type_t *type, int *length)
     static const struct opdef ops[] = {
         { "&>>", TOK_BOTH_APPEND },
         { "&>",  TOK_BOTH },
+        { "2>&1", TOK_ERR_DUP_OUT },
         { "2>>", TOK_ERR_APPEND },
         { "2>",  TOK_ERR },
         { ">>",  TOK_OUT_APPEND },
@@ -450,7 +451,8 @@ static void command_list_add(command_list_t *list, pipeline_t *pl)
 static int is_redirect(token_type_t type)
 {
     return type == TOK_IN || type == TOK_OUT || type == TOK_OUT_APPEND ||
-           type == TOK_ERR || type == TOK_ERR_APPEND || type == TOK_BOTH ||
+           type == TOK_ERR || type == TOK_ERR_APPEND ||
+           type == TOK_ERR_DUP_OUT || type == TOK_BOTH ||
            type == TOK_BOTH_APPEND;
 }
 
@@ -459,6 +461,15 @@ static int parse_redirection(token_list_t *tl, int *index, redirect_t *redir,
 {
     token_type_t type = tl->items[*index].type;
     char *file;
+
+    if (type == TOK_ERR_DUP_OUT) {
+        ++*index;
+        free(redir->err_path);
+        redir->err_path = NULL;
+        redir->err_to_out = 1;
+        redir->merge_err = 0;
+        return 0;
+    }
 
     ++*index;
     if (*index >= tl->count || tl->items[*index].type != TOK_WORD) {
@@ -488,12 +499,14 @@ static int parse_redirection(token_list_t *tl, int *index, redirect_t *redir,
         free(redir->err_path);
         redir->err_path = file;
         redir->err_append = 0;
+        redir->err_to_out = 0;
         redir->merge_err = 0;
         break;
     case TOK_ERR_APPEND:
         free(redir->err_path);
         redir->err_path = file;
         redir->err_append = 1;
+        redir->err_to_out = 0;
         redir->merge_err = 0;
         break;
     case TOK_BOTH:
@@ -502,6 +515,7 @@ static int parse_redirection(token_list_t *tl, int *index, redirect_t *redir,
         redir->out_path = file;
         redir->err_path = NULL;
         redir->out_append = 0;
+        redir->err_to_out = 0;
         redir->merge_err = 1;
         break;
     case TOK_BOTH_APPEND:
@@ -510,6 +524,7 @@ static int parse_redirection(token_list_t *tl, int *index, redirect_t *redir,
         redir->out_path = file;
         redir->err_path = NULL;
         redir->out_append = 1;
+        redir->err_to_out = 0;
         redir->merge_err = 1;
         break;
     default:
@@ -546,6 +561,8 @@ static char *build_pipeline_text(const pipeline_t *pl)
         if (cmd->redir.err_path)
             fprintf(fp, " %s %s", cmd->redir.err_append ? "2>>" : "2>",
                     cmd->redir.err_path);
+        else if (cmd->redir.err_to_out)
+            fputs(" 2>&1", fp);
     }
     if (pl->background)
         fputs(" &", fp);

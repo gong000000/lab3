@@ -98,6 +98,8 @@ static const builtin_entry_t builtins[] = {
     { "mv",     b_mv,           0 },
     { "cat",    b_cat,          0 },
     { "grep",   b_grep,         0 },
+    { "netserv", cmd_netserv,   0 },
+    { "netcli",  cmd_netcli,    0 },
 };
 
 static const builtin_entry_t *find_builtin(const char *name)
@@ -494,7 +496,13 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  command &\n\n");
     printf("Built-in commands:\n");
     printf("  cd pwd echo exit jobs wait export unset help true false\n");
-    printf("  ls mkdir rmdir ln cp rm mv cat grep\n\n");
+    printf("  ls mkdir rmdir ln cp rm mv cat grep\n");
+    printf("  netserv [-p PORT] [-a ADDR] [-s TOKEN] [-t SEC] [-1]\n");
+    printf("  netcli [-p PORT] [-s TOKEN] [-t SEC] [-i] HOST [COMMAND...]\n\n");
+    printf("Examples:\n");
+    printf("  netserv -1 -p 9090 &\n");
+    printf("  netcli -p 9090 127.0.0.1 echo hello\n");
+    printf("  netcli -i -p 9090 127.0.0.1\n\n");
     printf("Interactive keys:\n");
     printf("  Ctrl-C  SIGINT  - interrupt the foreground job\n");
     printf("  Ctrl-Z  SIGQUIT - quit the foreground job (mapped by myshell)\n");

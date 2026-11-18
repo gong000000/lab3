@@ -1,4 +1,4 @@
-/*
+﻿/*
  * main.c - REPL, signal handling, and terminal/job-control setup
  *
  * The interactive loop follows the simple shell on textbook page 357:
@@ -219,7 +219,7 @@ static char *find_separator(char *start, int *background)
     return NULL;
 }
 
-static int execute_line(const char *line, shell_state_t *sh)
+int shell_execute_line(const char *line, shell_state_t *sh)
 {
     char *copy = msh_strdup(line);
     char *cursor = copy;
@@ -283,7 +283,7 @@ static void execute_text(const char *text, shell_state_t *sh)
 
     while (line != NULL && !sh->should_exit) {
         if (line[0] != '\0')
-            execute_line(line, sh);
+            shell_execute_line(line, sh);
         line = strtok_r(NULL, "\n", &save);
     }
     free(copy);
@@ -331,7 +331,7 @@ static int run_repl(shell_state_t *sh)
         if (n == 0)
             continue;
 
-        execute_line(line, sh);
+        shell_execute_line(line, sh);
     }
 
     free(line);
