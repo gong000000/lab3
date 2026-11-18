@@ -170,6 +170,10 @@ static char *find_separator(char *start, int *background)
             continue;
         }
         if (in_double) {
+            if (c == '\\' && p[1] != '\0') {
+                ++p;
+                continue;
+            }
             if (c == '"')
                 in_double = 0;
             continue;
