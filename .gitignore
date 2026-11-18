@@ -1,0 +1,23 @@
+# Build outputs
+/build/
+/myshell
+*.o
+*.obj
+*.exe
+
+# Local test artifacts
+/tests/tmp/
+*.log
+.stdout
+.stderr
+
+# Course materials at repository root (not part of the project)
+/*.pdf
+/*.hwp
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+__pycache__/

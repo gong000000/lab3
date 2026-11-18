@@ -1,0 +1,559 @@
+# 프로젝트 결과보고서
+
+## 간단한 쉘(Simple Shell) 구현 및 확장
+
+**오픈소스프로젝트(전공설계) · 2026학년도 2학기**
+
+| 항목 | 내용 |
+|---|---|
+| 과목 | 오픈소스프로젝트(전공설계) |
+| 프로젝트 | Lab 3 - 간단한 쉘 구현 및 확장 |
+| 팀명 | myshell |
+| 팀원 | 류동엽 (20223154, @gong000000), 강동우 (20223080, @pizza0420) |
+| GitHub | https://github.com/gong000000/lab3 |
+| 제출일 | 2026. 11. 18. |
+
+
+---
+
+
+# 1. 프로젝트 개요
+
+
+## 1.1 추진 배경
+
+교재 357쪽의 simplesh.c는 fgets()로 한 줄을 읽고, getargs()로 인자를 분리한 뒤 fork()와 execvp()로 명령을 실행하고 부모가 wait()로 기다리는 가장 기본적인 쉘이다. 이 프로그램은 쉘의 핵심 원리(명령 해석, 프로세스 생성, 프로그램 적재, 부모-자식 동기화)를 보여 주지만, 실제 쉘에 필요한 종료 처리, 백그라운드 실행, 인터럽트 처리, 재지향, 파이프, 내장 명령이 모두 빠져 있다.
+
+본 프로젝트는 simplesh.c의 구조를 그대로 유지하면서 위 기능을 단계적으로 확장하여, 리눅스에서 실제로 사용할 수 있는 작은 POSIX 쉘(myshell)을 완성하는 것을 목표로 한다. 단순히 외부 명령을 실행하는 수준을 넘어, 과제에서 요구한 11개 명령(ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep)을 시스템 콜과 C 라이브러리로 직접 구현하였다.
+
+
+## 1.2 프로젝트 목표
+
+- 교재의 simplesh.c를 기반으로 명령 해석 → 프로세스 생성 → 실행 → 대기의 전체 흐름을 이해하고 구현한다.
+- exit, &, SIGINT/SIGQUIT, 재지향(>, <), 파이프(|)를 추가하여 실제 쉘과 유사한 사용성을 제공한다.
+- 11개 명령을 외부 프로그램 호출 없이 직접 구현하여 파일 시스템과 텍스트 처리 시스템 콜을 익힌다.
+- 자동화된 기능 테스트와 PTY 기반 시그널 테스트로 안정성을 검증한다.
+- MIT 라이선스로 GitHub에 공개하여 자유롭게 사용·수정·배포할 수 있게 한다.
+
+
+## 1.3 구현 범위
+
+| 구분 | 내용 |
+|---|---|
+| 필수 기능 | exit, 백그라운드(&), SIGINT/SIGQUIT, 재지향(>, <), 파이프(\|) |
+| 필수 내장 명령 | ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep |
+| 추가 내장 명령 | echo, export, unset, jobs, wait, help, true, false, : |
+| 추가 문법 | >>, 2>, 2>>, &>, &>>, 다단 파이프, 세미콜론(;), 따옴표, 변수 확장 |
+| 문서/배포 | README, MIT LICENSE, 결과보고서(HWP/PDF), 자동 테스트 |
+
+
+## 1.4 개발 환경
+
+| 항목 | 내용 |
+|---|---|
+| 운영체제 | Ubuntu 26.04.1 LTS (WSL2, Linux 6.6) |
+| 컴파일러 | gcc 15.2.0 (GNU C17, -std=gnu11) |
+| 빌드 도구 | GNU Make 4.4.1 |
+| 테스트 | Bash 5.x, Python 3.14 (pty/select 기반 시그널 테스트) |
+| 버전 관리 | Git 2.53, GitHub (gong000000/lab3) |
+| 외부 라이브러리 | glibc, POSIX regex 외 없음 |
+
+
+## 1.5 결과 요약
+
+최종 프로그램은 총 4,624줄의 C 소스(헤더 포함)로 구성되며, 11개 필수 내장 명령과 9개 보조 내장 명령을 제공한다. 92개의 기능 테스트와 PTY 기반 시그널 테스트를 모두 통과했고, ASan/UBSan 빌드에서도 동일한 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 재현 가능한 테스트 스크립트가 함께 포함되어 있다.
+
+| 항목 | 결과 |
+|---|---|
+| 소스 규모 | 헤더 포함 4,624줄 (설계 지침 1,000~10,000줄 충족) |
+| 필수 내장 명령 | ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개) |
+| 보조 내장 명령 | echo, export, unset, jobs, wait, help, true, false, : (9개) |
+| 기능 테스트 | 92 / 92 통과 |
+| 시그널 테스트 | PTY에서 Ctrl-C/Ctrl-Z 후 쉘 생존 확인 |
+| 문서/배포 | README, MIT LICENSE, HWP/PDF 보고서, 테스트 스크립트 |
+
+
+---
+
+
+# 2. 설계 구성 요소
+
+
+## 2.1 요구사항 분석
+
+| ID | 요구사항 | 설계/구현 방향 | 검증 방법 |
+|---|---|---|---|
+| R1 | exit로 프로그램 종료 | exit [status] 내장 명령. 부모 프로세스에서 should_exit 플래그를 세우고 종료 상태를 $?와 프로세스 종료 코드로 전달. | 종료 코드 확인, exit 이후 명령이 실행되지 않는지 확인 |
+| R2 | 명령 끝 &로 백그라운드 실행 | 명령 목록을 실행 시점에 분리하고, &가 붙은 파이프라인은 fork 후 wait하지 않고 job 테이블에 등록. jobs/wait/$! 제공. | 1초 sleep이 800ms 이내에 프롬프트로 복귀하는지 측정 |
+| R3 | SIGINT/SIGQUIT 처리 | 쉘은 SIGINT/SIGQUIT을 핸들러로 처리하고, 자식은 기본 동작으로 복원. 전경 작업을 별도 프로세스 그룹으로 만들고 tcsetpgrp()로 터미널 제어권 이동. 과제 명세에 맞춰 Ctrl-Z를 SIGQUIT에 매핑. | PTY에서 Ctrl-C/Ctrl-Z를 전송한 뒤 쉘 생존과 프롬프트 복귀 확인 |
+| R4 | 재지향 및 파이프 | open()/dup2()로 <, >, >>, 2>, 2>>, &>, &>> 구현. 파이프는 pipe()와 fork()를 명령 수만큼 반복하고, 마지막 명령의 종료 상태를 사용. | 파일 내용 비교, 다단 파이프, stderr 분리/병합 테스트 |
+| R5 | 11개 명령 구현 | 각 명령을 별도 C 모듈로 구현. 시스템 콜(lstat, opendir, link, symlink, readlink, rename, unlink, rmdir 등)과 POSIX regex 사용. | 명령별 옵션/오류/경계 조건을 자동 테스트로 검증 |
+
+
+## 2.2 시스템 구조
+
+```text
++---------------------------- 사용자 터미널 ----------------------------+
+|  stdin/stdout/stderr, Ctrl-C(SIGINT), Ctrl-Z(SIGQUIT)              |
++----------------------------------+---------------------------------+
+                                   |
+                    +--------------v--------------+
+                    |  main.c : REPL, signal,     |
+                    |  termios, process group     |
+                    +--------------+--------------+
+                                   |
+                    +--------------v--------------+
+                    | parser.c : tokenizer,       |
+                    | quote/expansion, grammar    |
+                    +--------------+--------------+
+                                   |
+                    +--------------v--------------+
+                    | execute.c : fork/exec,      |
+                    | pipe, dup2, wait            |
+                    +----+-------------------+----+
+                         |                   |
+          +--------------v------+   +--------v------------------+
+          | builtin.c + cmd_*.c |   | execvp() : 외부 명령      |
+          | 11개 명령 + 보조     |   | (/bin/ls, date, ...)      |
+          +--------------+------+   +---------------------------+
+                         |
+          +--------------v--------------+
+          | jobs.c : 백그라운드 작업     |
+          | 테이블, waitpid(WNOHANG)     |
+          +-----------------------------+
+```
+
+
+## 2.3 모듈 구성
+
+| 파일 | 역할 | 줄 수 |
+|---|---|---|
+| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 222 |
+| src/main.c | REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화 | 386 |
+| src/parser.c | 토큰화, 따옴표/변수/틸드 확장, 파이프라인/재지향 문법 | 698 |
+| src/execute.c | fork/exec, 파이프, dup2, 전경/백그라운드 대기 | 349 |
+| src/jobs.c | 백그라운드 job 테이블, 좀비 회수, 종료 시 SIGHUP | 154 |
+| src/builtin.c | 내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/export | 519 |
+| src/cmd_ls.c | ls (-a, -l, -R, -h) | 370 |
+| src/cmd_fs.c | mkdir, rmdir, ln, cp, rm, mv | 929 |
+| src/cmd_text.c | cat, grep (POSIX regex) | 469 |
+| src/util.c | 메모리/경로/파일 복사·삭제/모드 출력 유틸 | 528 |
+
+
+## 2.4 핵심 자료구조
+
+| 구조체 | 주요 필드 | 역할 |
+|---|---|---|
+| redirect_t | in_path, out_path, out_append, err_path, merge_err | 한 명령의 입력/출력/에러 재지향 정보 |
+| command_t | argv[], argc, redir | 한 명령의 인자와 재지향 |
+| pipeline_t | commands[], ncommands, background, text | 파이프로 연결된 명령 묶음과 백그라운드 여부 |
+| command_list_t | pipelines[], npipelines | 세미콜론/앰퍼샌드로 구분된 명령 목록 |
+| job_t | id, pgid, pids[], done[], running, status, command | 백그라운드 작업의 프로세스 그룹과 완료 상태 |
+| shell_state_t | interactive, last_status, last_bg_pid, jobs[], termios | 쉘 전체 상태($?, $!, 작업 테이블, 터미널 설정) |
+
+
+## 2.5 핵심 설계
+
+
+### 2.5.1 파싱과 확장
+
+파서는 두 단계로 동작한다. 먼저 main.c의 find_separator()가 따옴표와 이스케이프를 고려하여 최상위 세미콜론(;)과 앰퍼샌드(&)를 찾아 명령 목록을 실행 단위로 나눈다. 이 시점에 각 명령을 바로 파싱·실행하므로, export로 바꾼 환경변수나 직전 명령의 $?가 다음 명령에 정확히 반영된다. 이어서 parser.c의 tokenizer가 단어와 연산자를 분리하고, 작은따옴표/큰따옴표, 백슬래시, $VAR/${VAR}, $?, $$, $!, 선행 ~를 확장한다.
+
+```text
+/* main.c: 실행 시점에 ;와 &를 분리 (개념 발췌) */
+static char *find_separator(char *start, int *background)
+{
+    int in_single = 0, in_double = 0, at_word_start = 1;
+    for (char *p = start; *p; ++p) {
+        if (*p == '\\' && !in_single) { if (p[1]) ++p; continue; }
+        if (in_single) { if (*p == '\'') in_single = 0; continue; }
+        if (in_double) { if (*p == '"') in_double = 0; continue; }
+        if (*p == '\'') { in_single = 1; continue; }
+        if (*p == '"') { in_double = 1; continue; }
+        if (*p == '#' && at_word_start) return NULL;
+        if (*p == ';') { *background = 0; return p; }
+        if (*p == '&') {
+            if (p[1] == '>') continue;          /* &> 재지향 */
+            if (p[1] == '&') { ++p; continue; } /* &&는 파서가 오류 처리 */
+            if (p > start && p[-1] == '>') continue;
+            *background = 1; return p;
+        }
+        at_word_start = isspace((unsigned char)*p);
+    }
+    return NULL;
+}
+```
+
+문법은 다음과 같다. 빈 명령, 파이프 끝의 |, 재지향 뒤 파일명 누락 등은 실행 전에 오류로 처리하고, 오류가 발생한 명령 목록만 건너뛴 뒤 쉘은 계속 동작한다.
+
+```text
+list       := pipeline (';' pipeline)* ['&'] [';']
+pipeline   := command ('|' command)*
+command    := word+ redirect*
+redirect   := ('<' | '>' | '>>' | '2>' | '2>>' | '&>' | '&>>') word
+```
+
+
+### 2.5.2 실행과 내장 명령
+
+단일 명령이 cd, exit, jobs, wait, export, unset처럼 쉘 자체의 상태를 바꾸는 내장 명령이면 부모 프로세스에서 실행한다. 이때 재지향이 있으면 표준 파일 디스크립터를 dup()로 저장하고 open()/dup2()로 잠시 바꾼 뒤 복원한다. 그 밖의 명령은 모두 자식 프로세스에서 실행하므로, 파이프 중간의 cd가 부모의 작업 디렉터리를 바꾸지 않는다.
+
+파이프라인은 명령 수만큼 pipe()를 만들고 fork()한다. 첫 자식이 setpgid(0, 0)로 새 프로세스 그룹을 만들고, 이후 자식과 부모가 같은 pgid에 참여한다. 부모는 tcsetpgrp()로 전경 프로세스 그룹에 터미널을 넘기고, 각 자식의 종료를 waitpid()로 수집한다. 마지막 명령의 종료 상태가 파이프라인 전체의 상태가 된다.
+
+```text
+/* execute.c: 파이프라인 생성 (요약) */
+for (i = 0; i < n; i++) {
+    if (i < n - 1 && pipe(pipefd) < 0) goto fork_failed;
+    pid = fork();
+    if (pid == 0) {
+        setpgid(0, pgid ? pgid : getpid());
+        reset_child_signals();
+        if (prev_read != -1) { dup2(prev_read, STDIN_FILENO); close(prev_read); }
+        if (i < n - 1) { dup2(pipefd[1], STDOUT_FILENO); close(pipefd[1]); }
+        apply_redirections(&cmd->redir);
+        if (is_builtin(cmd->argv[0]))
+            _exit(run_builtin(cmd->argc, cmd->argv, sh, 1));
+        execvp(cmd->argv[0], cmd->argv);
+        _exit(127);
+    }
+    ...
+}
+```
+
+
+### 2.5.3 시그널과 작업 제어
+
+쉘은 SIGINT와 SIGQUIT에 대해 핸들러를 설치하지만, 전경 작업이 실행 중일 때는 터미널의 전경 프로세스 그룹이 자식이므로 시그널은 자식에게 직접 전달된다. 자식은 fork 직후 SIGINT, SIGQUIT, SIGTSTP, SIGTTIN, SIGTTOU, SIGCHLD, SIGPIPE 등을 모두 SIG_DFL로 복원한다. 따라서 Ctrl-C는 실행 중인 전경 명령만 중단시키고 쉘은 살아남아 다음 프롬프트를 출력한다.
+
+과제 명세의 “SIGQUIT: Ctrl-Z”를 만족하기 위해 쉘 시작 시 termios의 VQUIT를 Ctrl-Z(0x1A)로 설정하고 VSUSP를 비활성화한다. 이는 일반 리눅스의 Ctrl-Z(SIGTSTP, 작업 일시정지)와 다른 동작이며, 쉘 종료 시 저장해 둔 termios로 복구한다. 이 매핑은 README와 help 명령에도 명시했다.
+
+```text
+/* main.c: Ctrl-Z를 SIGQUIT으로 매핑 */
+if (tcgetattr(STDIN_FILENO, &sh->saved_termios) == 0) {
+    struct termios t = sh->saved_termios;
+    t.c_cc[VQUIT] = 0x1a;                 /* Ctrl-Z */
+#ifdef VSUSP
+    t.c_cc[VSUSP] = _POSIX_VDISABLE;      /* SIGTSTP 비활성화 */
+#endif
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &t) == 0)
+        sh->termios_modified = 1;
+}
+```
+
+
+### 2.5.4 테스트 설계
+
+기능 테스트는 쉘을 비대화식(-c)으로 실행해 stdout, stderr, 종료 상태를 각각 비교하는 방식으로 작성했다. 파일 시스템 명령은 임시 디렉터리에서 수행하고, 테스트가 끝나면 작업 디렉터리를 삭제한다. 시그널은 실제 터미널이 필요한 기능이므로 Python의 pty.fork()로 가상 터미널을 만들고 Ctrl-C/Ctrl-Z 바이트를 전송한 뒤 프롬프트 복귀와 쉘 생존을 확인한다.
+
+
+## 2.6 설계 구성 요소와의 대응
+
+| 설계 구성 요소 | 본 프로젝트에서의 수행 내용 |
+|---|---|
+| 목표/기준 설정 | 교재 357쪽 simplesh.c를 기준으로 5개 필수 요구사항과 11개 내장 명령을 목표로 설정 |
+| 분석 | 요구사항을 R1~R5로 분해하고, 프로세스/시그널/파일 시스템/텍스트 처리로 나누어 분석 |
+| 제작 | parser, executor, job manager, builtin, cmd_* 모듈로 구현. Makefile로 재현 가능한 빌드 제공 |
+| 시험 | 92개 기능 테스트 + PTY 시그널 테스트 + ASan/UBSan 빌드 검증 |
+
+
+---
+
+
+# 3. 설계 제한 요소
+
+| 제한 요소 | 설계 기준 | 본 프로젝트의 대응 |
+|---|---|---|
+| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 헤더 포함 4,624줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
+| 안정성 | 외부 환경 변화에도 지속적으로 동작 | 오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 92개 자동 테스트, ASan/UBSan 검증 |
+| 생산성 | 모든 기능이 동작하고 응용 가능 | 11개 필수 명령 + 9개 보조 명령, 다단 파이프/재지향, 옵션 지원, README/보고서 제공 |
+| 윤리성/사회적 영향 | 안전하고 책임 있는 소프트웨어 | rm의 /, ., .. 보호, system()/popen() 미사용, MIT 라이선스로 투명한 재사용 허용 |
+| 표준성 | POSIX/Linux 표준 인터페이스 사용 | fork, execvp, waitpid, pipe, dup2, signal/sigaction, termios, dirent, regex 사용 |
+| 이식성 | 리눅스/WSL에서 빌드 및 실행 | Ubuntu 26.04 WSL2와 gcc 15.2에서 검증. GNU 확장은 _GNU_SOURCE로 명시 |
+
+
+## 3.1 경제성
+
+전체 소스는 4,624줄로 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
+
+
+## 3.2 안정성
+
+모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 92개 테스트를 통과했다.
+
+
+## 3.3 생산성
+
+ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. 테스트는 make test 한 번으로 재현할 수 있다.
+
+
+## 3.4 윤리성과 사회적 영향
+
+쉘은 파일 삭제·복사·이동 권한을 가지므로 안전장치가 필요하다. rm은 /, ., ..를 거부하고, 재귀 삭제는 심볼릭 링크를 따라가지 않는다. 외부 명령은 execvp()로 직접 실행하며 system()/popen()을 사용하지 않아 문자열 주입으로 인한 추가 쉘 해석을 피했다. MIT 라이선스는 사용자가 자유롭게 수정·배포할 수 있음을 명확히 한다.
+
+
+## 3.5 표준성과 이식성
+
+POSIX/Linux 시스템 콜과 C 표준 라이브러리를 사용했으며, 특정 배포판에 종속된 기능은 사용하지 않았다. WSL2의 Ubuntu 26.04에서 개발·검증했고, 일반 리눅스에서도 동일하게 빌드된다. 다만 터미널 제어(tcsetpgrp)와 termios는 POSIX 터미널이 있는 환경을 전제로 한다.
+
+
+---
+
+
+# 4. 설계 내용
+
+
+## 4.1 요구사항 분해와 구현 전략
+
+교재의 simplesh.c는 입력, 인자 분리, fork, exec, wait의 다섯 단계로 구성된다. 본 프로젝트는 이 흐름을 유지하되, 입력 단계에 실행 시점 분리와 확장을, 실행 단계에 재지향/파이프/프로세스 그룹을, 대기 단계에 작업 테이블과 시그널 처리를 추가했다. 내장 명령은 실행 단계에서 분기하여 부모 프로세스 또는 자식 프로세스에서 실행한다.
+
+| 단계 | 교재 simplesh.c | myshell 확장 |
+|---|---|---|
+| 입력 | fgets(buf, 256, stdin) | getline()으로 길이 제한 없이 읽고, ;/&를 실행 시점에 분리 |
+| 인자 분리 | getargs()가 공백만 처리 | 따옴표, 이스케이프, $VAR, $?, $$, $!, ~ 확장 |
+| 실행 | 무조건 fork + execvp | 내장 명령 분기, 파이프/재지향, 다중 명령 |
+| 대기 | wait((int *)0) | waitpid()로 개별 수집, 백그라운드 job 회수, 종료 상태 저장 |
+| 시그널 | 없음 | SIGINT/SIGQUIT 핸들러, 자식 신호 복원, 전경 프로세스 그룹 |
+
+
+## 4.2 파서와 확장
+
+토크나이저는 연산자(&>>, &>, 2>>, 2>, >>, >, <, |, ;, &)를 단어보다 먼저 인식한다. 단어는 작은따옴표(문자 그대로), 큰따옴표($ 확장 허용), 백슬래시 이스케이프를 지원하며, 빈 따옴표("")도 하나의 빈 인자로 보존한다. 변수 확장은 getenv()를 사용하고, 정의되지 않은 변수는 빈 문자열로 확장한다. $?는 직전 명령의 종료 상태, $$는 쉘 PID, $!는 마지막 백그라운드 프로세스 그룹 ID를 나타낸다.
+
+명령 목록을 실행 시점에 분리하는 설계는 단순히 $?뿐 아니라 “export X=hello; echo $X”와 같은 한 줄 명령에서도 올바른 값을 보장한다. 만약 전체 줄을 한 번에 확장하면 두 번째 명령의 $X가 이전 값을 보게 되므로, 이 분리는 쉘 의미론상 중요한 선택이었다.
+
+
+## 4.3 실행기와 프로세스 제어
+
+전경 파이프라인은 모든 자식을 하나의 프로세스 그룹으로 묶고, 부모가 tcsetpgrp()로 터미널 전경 그룹을 자식 그룹으로 바꾼다. 자식이 모두 끝나면 다시 쉘 그룹으로 복원한다. 이 구조 덕분에 Ctrl-C/Ctrl-Z가 쉘 전체가 아니라 전경 작업에만 전달된다. 백그라운드 파이프라인은 같은 방식으로 그룹을 만들되 터미널을 넘겨받지 않고, job 테이블에 등록한다.
+
+재지향은 파이프 연결 후에 적용한다. 따라서 “cmd1 | cmd2 > file”에서 cmd2의 표준 출력은 파이프가 아니라 file로 향하며, cmd1의 출력은 cmd2의 표준 입력으로 들어간다. 2>와 &>는 각각 stderr만, stdout+stderr 동시를 처리한다. 파일은 O_CREAT|O_TRUNC(또는 O_APPEND)로 열고, dup2()로 표준 fd에 복제한 뒤 원래 fd를 닫는다.
+
+
+## 4.4 시그널과 터미널
+
+쉘은 SIGINT/SIGQUIT 핸들러에서 화면에 개행만 출력하고 종료하지 않는다. 전경 작업 중에는 터미널이 자식 그룹을 가리키므로 시그널이 쉘에 오지 않고, 자식은 기본 동작으로 종료된다. 부모는 waitpid()로 자식의 종료를 확인하고 128+signal을 $?에 저장한다. SIGQUIT으로 종료된 경우에는 “Quit (core dumped)” 메시지를 출력한다.
+
+
+## 4.5 내장 명령 구현
+
+11개 명령은 모두 C로 직접 구현했다. 파일 시스템 명령은 lstat/stat로 심볼릭 링크와 대상 파일을 구분하고, 재귀 복사·삭제는 dirent로 디렉터리를 순회한다. cat은 getline()으로 줄 단위 처리하며 -n/-b/-E/-T를 지원한다. grep은 POSIX regcomp/regexec를 사용하고, -F는 strstr/strcasestr로 고정 문자열을 찾는다. 재귀 grep은 디렉터리를 순회하되 심볼릭 링크를 따라가지 않아 무한 루프를 방지한다.
+
+| 명령 | 핵심 구현 | 대표 옵션 |
+|---|---|---|
+| ls | opendir/readdir, qsort, lstat, getpwuid/getgrgid, strftime | -a, -l, -R, -h |
+| pwd | getcwd(NULL, 0) | -L, -P |
+| cd | chdir, getcwd, PWD/OLDPWD 갱신 | cd, cd DIR, cd - |
+| mkdir | mkdir, 재귀 생성 헬퍼 | -p, -m, -v |
+| rmdir | rmdir, 부모 디렉터리 순차 제거 | -p, -v |
+| ln | link, symlink, readlink, unlink | -s, -f, -v |
+| cp | open/read/write, 재귀 복사, chmod/utimensat | -r, -f, -i, -p, -v |
+| rm | lstat, unlink, 재귀 삭제, 안전 경로 검사 | -r, -f, -i, -v |
+| mv | rename, EXDEV 시 복사 후 삭제 | -f, -i, -n, -v |
+| cat | getline, 줄 번호/탭/줄 끝 표시 | -n, -b, -E, -T |
+| grep | regcomp/regexec, 재귀 탐색, 파일명/줄 번호 prefix | -i, -v, -n, -c, -l, -r, -E, -F, -q |
+
+
+## 4.6 테스트 설계와 자동화
+
+tests/run_tests.sh는 92개의 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교하며, 실패 시 해당 출력을 그대로 보여 주어 원인을 빠르게 찾을 수 있다. tests/test_signals.py는 pty.fork()로 가상 터미널을 열고, sleep/cat이 전경에서 실행 중일 때 Ctrl-C와 Ctrl-Z를 보낸 뒤 프롬프트가 돌아오는지 확인한다. 두 테스트 모두 make test와 python3 tests/test_signals.py로 재현할 수 있다.
+
+
+## 4.7 협업과 형상 관리
+
+기능별로 소스를 분리하고, 커밋은 “기능 구현 → 테스트 → 문서” 단위로 나누었다. 파일 시스템 명령은 cmd_fs.c, 텍스트 명령은 cmd_text.c, ls는 cmd_ls.c로 분리해 동시 작업 시 충돌을 줄였다. 통합 전에는 항상 make와 테스트 스크립트를 실행해 회귀를 확인했다. GitHub 저장소에는 README, LICENSE, Makefile, 테스트, 보고서를 함께 두어 제3자가 바로 빌드·실행할 수 있게 했다.
+
+
+---
+
+
+# 5. 프로젝트 결과
+
+
+## 5.1 프로젝트 구현 내용
+
+| 기능 | 구현 상태 | 검증 결과 |
+|---|---|---|
+| exit | 완료 | 종료 상태 3, exit 이후 명령 미실행 확인 |
+| 백그라운드 & | 완료 | sleep 1이 800ms 이내에 복귀, jobs/wait/$! 동작 |
+| SIGINT (Ctrl-C) | 완료 | sleep/cat 전경 작업 중단 후 쉘 생존 |
+| SIGQUIT (Ctrl-Z) | 완료 | VQUIT 매핑, sleep/cat 중단 후 쉘 생존 |
+| <, >, >> | 완료 | 파일 내용 비교, append 확인 |
+| 2>, 2>>, &>, &>> | 완료 | stderr 분리/병합/append 확인 |
+| 파이프 \| | 완료 | 2단/3단 파이프, 내장 명령 파이프 확인 |
+| ls | 완료 | -a, -l, -R, -h 및 오류 처리 |
+| pwd, cd | 완료 | cd -, PWD/OLDPWD, 파이프 내 cd 격리 |
+| mkdir, rmdir | 완료 | -p, -m, 비어 있지 않은 디렉터리 오류 |
+| ln | 완료 | 하드 링크, 심볼릭 링크, -f 덮어쓰기 |
+| cp | 완료 | -r, -p, -f, -i, 자기 자신 복사 방지 |
+| rm | 완료 | -r, -f, -i, /·.·.. 보호 |
+| mv | 완료 | 이름 변경, 디렉터리 이동, EXDEV 복사 후 삭제 |
+| cat | 완료 | -n, -b, -E, -T, 다중 파일 |
+| grep | 완료 | -i, -v, -n, -c, -l, -r, -E, -F, -q |
+
+다음은 실제 실행 예시이다.
+
+```text
+shell> pwd
+/home/student/lab3
+shell> echo hello > out.txt
+shell> cat < out.txt
+hello
+shell> cat out.txt | grep -n hello
+1:hello
+shell> sleep 2 &
+[1] 12345
+shell> jobs
+[1]  Running  sleep 2 &
+shell> wait
+shell> echo done
+done
+shell> ls -l out.txt
+-rw-r--r-- 1 student student 6 2026-11-18 18:00 out.txt
+shell> exit
+```
+
+
+## 5.2 프로젝트 완성도 평가
+
+기능 테스트 92개가 모두 통과했고(Passed: 92, Failed: 0), PTY 시그널 테스트도 통과했다(SIGNAL TEST PASSED). ASan/UBSan을 켠 빌드에서도 동일한 기능 테스트를 통과하여 메모리 오류와 정의되지 않은 동작이 발견되지 않았다. 다만 다음 기능은 설계 범위에서 제외했다.
+
+| 제외 기능 | 이유 | 영향 |
+|---|---|---|
+| glob(*, ?) 확장 | 과제 필수 범위가 아니며, 패턴 매칭 라이브러리 추가 필요 | ls *.c 같은 입력은 외부 명령에 그대로 전달 |
+| &&, \|\| | 필수 범위 아님. 문법 오류로 안전하게 거부 | 조건부 실행 불가 |
+| 2>&1 | fd 복제 문법 미지원. 2>와 &>로 대체 가능 | 일부 스크립트 호환성 제한 |
+| fg, bg | SIGTSTP 일시정지 모델을 사용하지 않음 | 중단된 작업 재개 불가 |
+| 명령 치환 $(...) | 필수 범위 아님 | 명령 결과를 인자로 사용 불가 |
+
+
+## 5.3 일정 계획 평가
+
+| 주차 | 계획 | 실제 수행 | 평가 |
+|---|---|---|---|
+| 11주 | 주제 선정, 요구사항 분석, 설계 | 교재 357쪽 분석, R1~R5 분해, 모듈/자료구조 설계 | 계획대로 |
+| 12주 | 파서/실행기 구현 | 따옴표·변수 확장, 파이프·재지향, 내장 명령 디스패치 | 계획대로 |
+| 13주 | 시그널/작업 제어 | 프로세스 그룹, tcsetpgrp, VQUIT 매핑, jobs/wait | 계획대로 |
+| 14주 | 11개 명령 구현 및 통합 | 파일/텍스트 명령 구현, 92개 테스트, ASan 검증 | 테스트 보강으로 일부 지연 |
+| 15주 | 보고서/GitHub 정리 | README, LICENSE, HWP/PDF 보고서, 저장소 정리 | 계획대로 |
+
+14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 추가로 발견하여 테스트를 보강했고, 그만큼 문서 작업을 15주차로 몰아서 진행했다. 전체 일정은 15주 내에 완료되었다.
+
+
+## 5.4 역할 수행 평가
+
+| 팀원 | 학번 | GitHub | 담당 업무 | 기여도 |
+|---|---|---|---|---|
+| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), pwd, cd, ls, mkdir, rmdir, 통합 | 50% |
+| 강동우 | 20223080 | pizza0420 | ln, cp, rm, mv, cat, grep, 자동 테스트/문서, 교차 파일시스템 mv 검증 | 50% |
+
+명령 구현은 류동엽이 5개(pwd, cd, ls, mkdir, rmdir), 강동우가 6개(ln, cp, rm, mv, cat, grep)를 담당해 개수 기준으로 균형을 맞췄다. 류동엽은 쉘 코어와 통합을, 강동우는 파일/텍스트 명령과 테스트를 담당하여 전체 작업량을 균형 있게 분배했다. 두 팀원 모두 상대가 구현한 모듈의 테스트를 실행하고 코드 리뷰를 수행했다.
+
+
+## 5.5 위험 처리
+
+| 위험 | 영향 | 대응 | 결과 |
+|---|---|---|---|
+| 터미널 전경 그룹 경쟁 | Ctrl-C가 쉘까지 종료 | 자식 setpgid + 부모 tcsetpgrp, 자식 신호 기본값 복원 | PTY 테스트 통과 |
+| 좀비 프로세스 | 백그라운드 작업 누적 | waitpid(WNOHANG) 주기적 회수, wait 내장 명령 | jobs에서 Done 확인 |
+| 파일 디스크립터 누수 | 장시간 사용 시 fd 고갈 | dup2 후 원본 close, 재지향 실패 시 복원 | ASan/UBSan 통과 |
+| 재귀 복사 자기 참조 | 무한 재귀/디스크 고갈 | realpath 기반 포함 관계 검사 | cp/mv 자기 복사 오류 확인 |
+| rm 오조작 | 중요 파일 삭제 | /, ., .. 거부, 심볼릭 링크 비추적 | 안전 경로 테스트 통과 |
+| 따옴표/이스케이프 파싱 | 명령 오해석 | 토크나이저 상태 머신, 92개 테스트 | 구문 오류/인용 테스트 통과 |
+
+
+## 5.6 GitHub 저장소와 라이선스
+
+프로젝트는 https://github.com/gong000000/lab3 에 공개되어 있으며, 팀원 강동우(pizza0420)를 Collaborator로 등록했다. 저장소 루트에는 MIT LICENSE가 있어 누구나 자유롭게 사용·수정·재배포할 수 있다. README에는 빌드, 실행, 테스트, 지원 옵션, 알려진 제한을 정리했다.
+
+
+---
+
+
+# 6. 소감
+
+
+## 류동엽
+
+교재의 simplesh.c가 단순히 “fork하고 exec한다”는 사실은 알고 있었지만, 실제 쉘을 만들면서 프로세스 그룹과 터미널 제어가 얼마나 중요한지 배웠다. 특히 Ctrl-C가 쉘 전체를 죽이지 않도록 전경 프로세스 그룹을 분리하고 tcsetpgrp()로 터미널을 넘기는 과정은 시행착오가 많았다. PTY 테스트를 직접 작성하면서 “코드가 컴파일되는 것”과 “터미널에서 의도대로 동작하는 것”은 다르다는 점을 체감했다. 파서를 실행 시점 분리와 결합해 $?와 export 의미를 맞춘 것도 좋은 경험이었다.
+
+
+## 강동우
+
+cp와 rm을 재귀적으로 구현하면서 파일 시스템의 경계 조건(심볼릭 링크, 같은 inode, EXDEV, 권한)을 많이 다뤄 보았다. grep은 POSIX regex와 고정 문자열 검색을 함께 지원하도록 만들면서 옵션 조합과 종료 상태의 중요성을 배웠다. 자동 테스트를 작성해 두니 이후 기능을 추가할 때 기존 동작이 깨지는지 바로 확인할 수 있어 든든했다. 팀원과 역할을 나누어 각자 맡은 모듈을 책임지고 리뷰하는 방식이 효과적이었다.
+
+
+## 함께
+
+짧은 기간이었지만 “작은 쉘”이라는 목표 안에서 프로세스, 시그널, 파일 시스템, 텍스트 처리, 문서화를 모두 경험할 수 있었다. 완성도 높은 결과물을 만들기 위해서는 기능 구현만큼 테스트와 문서가 중요하다는 것을 다시 한 번 느꼈다. MIT 라이선스로 공개한 만큼 다른 사람이 이 프로젝트를 확장해 더 나은 쉘을 만들 수 있기를 바란다.
+
+
+---
+
+
+# 부록 A. 빌드 및 실행
+
+```text
+# 빌드
+make
+
+# 대화형 실행
+./myshell
+
+# 한 줄 실행
+./myshell -c 'echo hello > out.txt; cat out.txt | grep hello'
+
+# 기능 테스트
+make test
+
+# 시그널 테스트 (Linux/WSL)
+python3 tests/test_signals.py
+```
+
+
+# 부록 B. 테스트 항목 요약
+
+| 영역 | 주요 검사 | 개수 |
+|---|---|---|
+| 종료/시퀀스 | exit 상태, true/false, 세미콜론 | 5 |
+| 인용/확장 | 따옴표, $HOME, ${VAR}, $?, 주석, ~ | 9 |
+| 재지향 | >, >>, <, 2>, 2>>, &>, 내장 명령 재지향 | 13 |
+| 파이프 | 2단/3단, 내장 명령 파이프, 파이프라인 상태 | 6 |
+| 백그라운드 | 조기 복귀, jobs, wait, $!, Done, 백그라운드 exit | 8 |
+| pwd/cd | pwd, cd, cd -, 실패, 다중 cd, 파이프 내 cd | 6 |
+| mkdir/rmdir | -p, 기존 디렉터리, -m, 비어 있지 않음, -p 삭제 | 5 |
+| ln | 하드/심볼릭, 기존 파일 오류, -sf | 4 |
+| cp | 파일, -r, 자기 복사, 없는 원본 | 4 |
+| mv | 이름 변경, 디렉터리, 자기 참조 | 4 |
+| rm | 파일, -r, -f, 디렉터리 오류 | 4 |
+| cat | 파일, -n, -b, 없는 파일 | 5 |
+| grep | 기본, -i, -v, -n, -c, -F, -E, -q, -r | 11 |
+| ls | 파일, -a, -l, -R | 5 |
+| 문법 오류 | 닫히지 않은 따옴표, 끝 파이프, 복구 | 3 |
+
+합계 92개. tests/run_tests.sh의 Passed/Failed 카운터와 일치한다.
+
+
+# 부록 C. 소스 규모
+
+| 파일 | 줄 수 | 비고 |
+|---|---|---|
+| include/myshell.h | 222 | 공용 선언 |
+| src/main.c | 386 | REPL/시그널/터미널 |
+| src/parser.c | 698 | 토큰화/확장/문법 |
+| src/execute.c | 349 | fork/pipe/redirection/wait |
+| src/jobs.c | 154 | 백그라운드 작업 |
+| src/builtin.c | 519 | 내장 명령 |
+| src/cmd_ls.c | 370 | ls |
+| src/cmd_fs.c | 929 | mkdir/rmdir/ln/cp/rm/mv |
+| src/cmd_text.c | 469 | cat/grep |
+| src/util.c | 528 | 공통 유틸 |
+| 합계 | 4,624 | 헤더 포함 |
+
+
+# 부록 D. 참고문헌
+
+- 교재 357쪽, simplesh.c (fgets/getargs/fork/execvp/wait 예제)
+- Linux man pages: fork(2), execvp(3), waitpid(2), pipe(2), dup2(2), signal(7), sigaction(2), termios(3), tcsetpgrp(3)
+- Linux man pages: opendir(3), readdir(3), lstat(2), link(2), symlink(2), readlink(2), rename(2), unlink(2), rmdir(2)
+- POSIX regex: regcomp(3), regexec(3), regerror(3)
+- 프로젝트 저장소: https://github.com/gong000000/lab3
