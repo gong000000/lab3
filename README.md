@@ -559,5 +559,5 @@ python docs/make_pdf.py      # REPORT.pdf (Chrome/Edge headless)
 ## 8. GitHub 및 라이선스
 
 - <https://github.com/gong000000/lab3>
-- Collaborator: `pizza0420` (강동우), write 권한 초대 완료 · 수락 대기
+- Collaborator: `pizza0420` (강동우), write 권한 등록 완료
 - MIT License: [LICENSE](LICENSE)
