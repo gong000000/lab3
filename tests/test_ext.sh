@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for explain, &&/||, glob, undo/trash, serve, and watch.
+# Tests for explain, &&/||, and glob (core transparent-shell extensions).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,7 +9,6 @@ OUT="$WORK/out"
 ERR="$WORK/err"
 PASS=0
 FAIL=0
-BASE=$((24000 + ($$ % 500) * 10))
 
 cleanup() {
     rm -rf "$WORK"
@@ -43,9 +42,6 @@ stdout_is() {
 }
 stdout_has() {
     if grep -Fq -- "$1" "$OUT"; then pass; else fail "$2 (missing $1)"; fi
-}
-stderr_has() {
-    if grep -Fq -- "$1" "$ERR"; then pass; else fail "$2 (missing $1)"; fi
 }
 
 # ------------------------------------------------------------------
@@ -85,55 +81,6 @@ run 'ls g*.txt'
 stdout_is "glob with builtin" $'g1.txt\ng2.txt'
 
 # ------------------------------------------------------------------
-echo "== undo / trash =="
-run 'echo keep > undo.txt; rm undo.txt; undo; cat undo.txt'
-status_is 0 "rm undo status"
-stdout_has "undo: restored" "rm undo message"
-stdout_has "keep" "rm undo content"
-
-run 'echo old > target.txt; echo new > source.txt; mv source.txt target.txt; undo; cat target.txt; cat source.txt'
-status_is 0 "mv undo status"
-stdout_has "old" "mv undo old content"
-stdout_has "new" "mv undo source content"
-
-run 'echo old2 > target2.txt; echo new2 > source2.txt; cp -f source2.txt target2.txt; undo; cat target2.txt'
-status_is 0 "cp -f undo status"
-stdout_has "old2" "cp -f undo content"
-
-run 'echo permanent > p.txt; rm --no-trash p.txt; test ! -e p.txt'
-status_is 0 "rm --no-trash"
-
-# ------------------------------------------------------------------
-echo "== pipestat =="
-run "pipestat 'echo hello | cat | wc -c'"
-status_is 0 "pipestat status"
-stdout_has "[1] echo hello: 6 bytes" "pipestat stage 1 bytes"
-stdout_has "[3] wc -c" "pipestat stage 3"
-run "pipestat 'echo hello | grep zzz'"
-status_is 1 "pipestat failure status"
-stdout_has "status 1" "pipestat failure report"
-
-# ------------------------------------------------------------------
-echo "== serve =="
-mkdir -p www/sub
-echo hello-http > www/index.txt
-PORT=$BASE
-run "serve -1 -p $PORT -d $WORK/www & sleep 0.5; curl -s http://127.0.0.1:$PORT/index.txt; wait"
-status_is 0 "serve GET status"
-stdout_has "hello-http" "serve GET body"
-
-PORT=$((BASE + 1))
-run "serve -1 -p $PORT -d $WORK/www & sleep 0.5; curl -s -o /dev/null -w '%{http_code}' --path-as-is http://127.0.0.1:$PORT/../etc/passwd; wait"
-status_is 0 "serve traversal status"
-stdout_has "403" "serve traversal blocked"
-
-# ------------------------------------------------------------------
-echo "== watch =="
-run 'watch -n 1 -c 1 echo watched'
-status_is 0 "watch status"
-stdout_has "Every 1s: echo watched" "watch header"
-stdout_has "watched" "watch command output"
-
 echo
 echo "Extension tests passed: $PASS"
 echo "Extension tests failed: $FAIL"

@@ -180,18 +180,12 @@ int msh_call_function(shell_state_t *sh, const char *name, int argc,
                       char **argv);
 void msh_functions_free(shell_state_t *sh);
 
-/* Execute one command line with the shell's parser/executor.  Used by the
- * network extension (netserv) to run a command received over TCP. */
+/* Execute one command line with the shell's parser/executor. */
 int shell_execute_line(const char *line, shell_state_t *sh);
 int cmd_explain(int argc, char **argv, shell_state_t *sh);
-int cmd_undo(int argc, char **argv, shell_state_t *sh);
-int cmd_serve(int argc, char **argv, shell_state_t *sh);
-int cmd_watch(int argc, char **argv, shell_state_t *sh);
 int cmd_prompt(int argc, char **argv, shell_state_t *sh);
-int cmd_pipestat(int argc, char **argv, shell_state_t *sh);
 int cmd_history(int argc, char **argv, shell_state_t *sh);
 int cmd_trace(int argc, char **argv, shell_state_t *sh);
-int cmd_dbg(int argc, char **argv, shell_state_t *sh);
 int cmd_rec(int argc, char **argv, shell_state_t *sh);
 int cmd_replay(int argc, char **argv, shell_state_t *sh);
 int rec_is_active(void);
@@ -208,8 +202,6 @@ void history_print(shell_state_t *sh);
 char *history_expand(const char *line, shell_state_t *sh);
 void history_clear(shell_state_t *sh);
 void history_free(shell_state_t *sh);
-int trash_move(const char *path);
-int trash_move_ex(const char *path, const char *undo_extra);
 
 /* ------------------------------------------------------------------ */
 /* jobs.c                                                             */
@@ -265,13 +257,6 @@ int cmd_mv(int argc, char **argv);
 
 int cmd_cat(int argc, char **argv);
 int cmd_grep(int argc, char **argv);
-
-/* ------------------------------------------------------------------ */
-/* cmd_net.c : TCP remote shell server/client                         */
-/* ------------------------------------------------------------------ */
-
-int cmd_netserv(int argc, char **argv, shell_state_t *sh);
-int cmd_netcli(int argc, char **argv, shell_state_t *sh);
 
 /* ------------------------------------------------------------------ */
 /* util.c                                                             */

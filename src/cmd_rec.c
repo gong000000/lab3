@@ -12,7 +12,7 @@
  * the real terminal and appended to the record, together with the exit
  * status and elapsed milliseconds.  Output is therefore shown when the
  * command completes, not while it is running; interactive full-screen
- * programs (dbg, editors) should not be recorded.
+ * programs (editors, full-screen tools) should not be recorded.
  */
 #include "myshell.h"
 

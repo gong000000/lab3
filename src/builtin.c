@@ -304,14 +304,8 @@ static const builtin_entry_t builtins[] = {
     { "mv",     b_mv,           0 },
     { "cat",    b_cat,          0 },
     { "grep",   b_grep,         0 },
-    { "netserv", cmd_netserv,   0 },
-    { "netcli",  cmd_netcli,    0 },
     { "explain", cmd_explain,   0 },
-    { "undo",    cmd_undo,      0 },
-    { "serve",   cmd_serve,     0 },
-    { "watch",   cmd_watch,     0 },
     { "prompt",  cmd_prompt,    1 },
-    { "pipestat", cmd_pipestat,  0 },
     { "history", cmd_history,   0 },
     { "test",    b_test,        0 },
     { "[",       b_test,        0 },
@@ -320,7 +314,6 @@ static const builtin_entry_t builtins[] = {
     { "source",  b_source,      1 },
     { ".",       b_source,      1 },
     { "trace",   cmd_trace,     0 },
-    { "dbg",     cmd_dbg,       1 },
     { "rec",     cmd_rec,       1 },
     { "replay",  cmd_replay,    0 },
 };
@@ -720,19 +713,12 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("Built-in commands:\n");
     printf("  cd pwd echo exit jobs wait export unset help true false\n");
     printf("  ls mkdir rmdir ln cp rm mv cat grep\n");
-    printf("  netserv [-p PORT] [-a ADDR] [-s TOKEN] [-t SEC] [-1]\n");
-    printf("  netcli [-p PORT] [-s TOKEN] [-t SEC] [-i] HOST [COMMAND...]\n");
     printf("  explain 'command line'\n");
-    printf("  undo\n");
-    printf("  serve [-p PORT] [-d DIR] [-a ADDR] [-1]\n");
-    printf("  watch [-n SEC] [-c COUNT] COMMAND...\n");
     printf("  prompt [on|off]\n");
-    printf("  pipestat 'command1 | command2'\n");
     printf("  history [-c]\n");
     printf("  test EXPR    (or [ EXPR ])\n");
     printf("  read [-r] VAR...  shift [N]  source FILE [ARGS...]\n");
     printf("  trace [-c] [-f] [-e NAME[,NAME...]] COMMAND...\n");
-    printf("  dbg PROGRAM [ARGS...]   (mini gdb: break/run/step/bt/regs/x)\n");
     printf("  rec start [-x] FILE | rec stop | rec status | rec export FILE HTML\n");
     printf("  replay FILE [-s SPEED]  (replay recorded commands/output)\n\n");
     printf("Scripting:\n");
@@ -742,10 +728,6 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  while CMD; do ...; done      until CMD; do ...; done\n");
     printf("  NAME() { ...; }              break / continue / return\n");
     printf("  myshell SCRIPT [ARGS...]\n\n");
-    printf("Examples:\n");
-    printf("  netserv -1 -p 9090 &\n");
-    printf("  netcli -p 9090 127.0.0.1 echo hello\n");
-    printf("  netcli -i -p 9090 127.0.0.1\n\n");
     printf("Interactive keys:\n");
     printf("  Ctrl-C  SIGINT  - interrupt the foreground job\n");
     printf("  Ctrl-Z  SIGQUIT - quit the foreground job (mapped by myshell)\n");
@@ -799,10 +781,8 @@ const char *const *msh_builtin_names(int *count)
     static const char *names[] = {
         "cd", "pwd", "echo", "exit", "jobs", "wait", "export", "unset",
         "help", "true", "false", ":", "ls", "mkdir", "rmdir", "ln",
-        "cp", "rm", "mv", "cat", "grep", "netserv", "netcli", "explain",
-        "undo", "serve", "watch", "prompt", "pipestat", "history",
-        "test", "[", "read", "shift", "source", ".", "trace", "dbg",
-        "rec", "replay"
+        "cp", "rm", "mv", "cat", "grep", "explain", "prompt", "history",
+        "test", "[", "read", "shift", "source", ".", "trace", "rec", "replay"
     };
     *count = (int)(sizeof(names) / sizeof(names[0]));
     return names;

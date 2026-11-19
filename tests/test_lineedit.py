@@ -72,9 +72,9 @@ def main():
     out = drain(fd)
     assert "한글".encode() in out, out
 
-    # Tab completion: "ec" -> "echo ".
+    # Tab completion: "ech" -> "echo ".
     os.write(fd, b"ech\t")
-    time.sleep(0.1)
+    read_until(fd, b"shell> echo ")
     os.write(fd, b"tabtest\r")
     out = drain(fd)
     assert b"tabtest" in out, out
