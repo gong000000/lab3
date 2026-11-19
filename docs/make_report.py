@@ -36,39 +36,58 @@ BLOCKS: list[tuple] = [
     ("pagebreak",),
 
     ("h1", "1. 프로젝트 개요"),
-    ("h2", "1.1 추진 배경"),
-    ("p", "교재 357쪽의 simplesh.c는 fgets()로 한 줄을 읽고, getargs()로 인자를 "
-          "분리한 뒤 fork()/execvp()로 명령을 실행하는 기본 쉘이다. exit, "
-          "백그라운드, 인터럽트, 재지향, 파이프, 내장 명령이 빠져 있어 실제 쉘과 "
-          "시스템 프로그래밍 학습 도구로 쓰기에는 부족하다."),
-    ("p", "Lab 3의 5개 요구사항과 11개 내장 명령을 구현하고, 파서·파이프·"
-          "시스템 호출·ELF·프로세스 상태를 확인하는 도구와 세션 기록 기능을 "
-          "추가했다."),
+    ("h2", "1.1 배경"),
+    ("p", "교재 357쪽의 simplesh.c는 fgets()로 한 줄을 입력받고, getargs()로 "
+          "인자를 나눈 뒤 fork()와 execvp()로 명령을 실행하고 부모가 wait()로 "
+          "기다리는 구조이다. 쉘의 기본 원리를 보여 주지만 exit, 백그라운드 실행, "
+          "인터럽트 처리, 재지향, 파이프, 내장 명령이 없어 실제 사용에는 부족하다."),
+    ("p", "쉘은 사용자와 운영체제 사이에서 명령을 해석하고 프로세스를 생성하는 "
+          "프로그램이다. 따라서 쉘을 구현하려면 문자열 파싱, 프로세스 생성, 파일 "
+          "디스크립터, 시그널, 프로세스 그룹, 대기 상태를 함께 다루어야 한다. "
+          "이 프로젝트는 이 요소들을 직접 구현하는 것에 더해, 실행 중인 쉘과 "
+          "프로세스의 내부 상태를 확인할 수 있는 도구를 같이 제공한다."),
+    ("h2", "1.2 주제"),
+    ("p", "주제는 “시스템 프로그래밍 학습용 투명 쉘”이다. 여기서 투명은 쉘 "
+          "자신의 동작과 자식 프로세스의 상태를 사용자가 직접 확인할 수 있다는 "
+          "뜻이다. 명령을 실행하는 기능과, 실행 과정을 보여 주는 기능을 같은 "
+          "바이너리에 결합했다."),
+    ("table",
+     ["구분", "내용"],
+     [
+         ["실행", "명령 해석, 파이프, 재지향, 백그라운드, 내장 명령"],
+         ["파서 확인", "explain: 파이프라인·재지향·연결자 구조 출력"],
+         ["파이프 확인", "pipestat: 단계별 바이트, 시간, 종료 코드"],
+         ["시스템 호출 확인", "trace: ptrace 기반 호출/인자/반환값, -c/-f/-e"],
+         ["ELF/프로세스 확인", "dbg: 심볼, 브레이크포인트, 레지스터, 메모리, 백트레이스"],
+         ["프로세스 상태 확인", "inspect: /proc status, fd, maps, namespace, process tree"],
+         ["세션 기록", "rec/replay: 명령·출력·상태·시간, HTML 내보내기"],
+     ]),
 
-    ("h2", "1.2 프로젝트 목표"),
+    ("h2", "1.3 목표"),
     ("bullets", [
-        "exit, &, SIGINT/SIGQUIT, 재지향/파이프를 구현한다.",
+        "exit, &, SIGINT/SIGQUIT, 재지향, 파이프를 구현한다.",
         "ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep을 직접 구현한다.",
-        "explain으로 파서 구조를, pipestat으로 파이프 단계를 보여 준다.",
-        "trace/dbg로 시스템 호출과 ELF 실행을 들여다본다.",
-        "inspect로 /proc 기반 프로세스 상태(fd, maps, namespace)를 조사한다.",
-        "rec/replay로 세션을 기록하고 HTML 타임라인으로 남긴다.",
+        "explain과 pipestat으로 파서와 파이프 단계를 확인할 수 있게 한다.",
+        "trace와 dbg로 시스템 호출과 ELF 프로그램 실행을 추적한다.",
+        "inspect로 /proc 기반 프로세스 상태를 조사한다.",
+        "rec/replay로 세션을 기록하고 결과를 HTML로 남긴다.",
+        "자동 테스트로 기능과 회귀를 검증한다.",
     ]),
 
-    ("h2", "1.3 구현 범위"),
+    ("h2", "1.4 구현 범위"),
     ("table",
      ["구분", "내용"],
      [
          ["필수 기능", "exit, 백그라운드(&), SIGINT/SIGQUIT, 재지향(>, <), 파이프(|)"],
          ["필수 내장 명령", "ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개)"],
          ["보조 내장 명령", "echo, export, unset, jobs, wait, help, true, false, :"],
-         ["관찰 도구", "explain(파서), pipestat(파이프), trace(시스템 호출), dbg(ELF/ptrace), inspect(/proc)"],
-         ["기록 도구", "rec/replay: 명령·출력·상태·시간, -x explain/trace, HTML export"],
-         ["문서/배포", "README, MIT LICENSE, PDF/HWP/DOCX 보고서, 자동 테스트"],
+         ["문법", "따옴표, $VAR, $?, $$, $!, $(...), glob, &&, ||, ;, &"],
+         ["관찰 도구", "explain, pipestat, trace, dbg, inspect"],
+         ["기록 도구", "rec, replay, HTML export"],
+         ["문서/배포", "README, MIT LICENSE, 결과보고서, 테스트 스크립트"],
      ]),
 
-    ("pagebreak",),
-    ("h2", "1.4 개발 환경"),
+    ("h2", "1.5 개발 환경"),
     ("table",
      ["항목", "내용"],
      [
@@ -80,30 +99,31 @@ BLOCKS: list[tuple] = [
          ["외부 라이브러리", "glibc, POSIX regex 외 없음"],
      ]),
 
-    ("h2", "1.5 결과 요약"),
-    ("p", "소스는 직접 작성 8,626줄, 생성 테이블 포함 8,763줄이다. 11개 필수 "
-          "명령과 관찰 도구 5종(explain, pipestat, trace, dbg, inspect), 기록 "
-          "도구(rec/replay)를 제공하며, 기능 94개·확장 21개·파일 입력 4개·추적 "
-          "32개·디버거 46개·녹화 35개·조사 31개 테스트와 PTY 시그널 테스트를 "
-          "통과했다."),
+    ("h2", "1.6 결과 요약"),
+    ("p", "직접 작성한 소스는 8,626줄, 생성 테이블을 포함하면 8,763줄이다. "
+          "테스트 코드 1,214줄을 포함한 전체 합계는 9,977줄이다. 필수 기능 5개와 "
+          "11개 내장 명령, 관찰 도구 5종, 기록 도구를 구현했고 263개 자동 테스트와 "
+          "PTY 시그널 테스트를 통과했다."),
     ("table",
      ["항목", "결과"],
      [
-         ["소스 규모", "직접 작성 8,626줄, 생성 포함 8,763줄"],
+         ["제품 소스", "직접 작성 8,626줄 + 생성 137줄 = 8,763줄"],
+         ["테스트 코드", "1,214줄"],
+         ["전체 합계", "9,977줄"],
          ["필수 내장 명령", "11개"],
          ["기능 테스트", "94 / 94"],
-         ["확장 테스트", "21 / 21 (explain, &&/||, glob, pipestat)"],
+         ["확장 테스트", "21 / 21"],
          ["파일 입력", "4 / 4"],
          ["추적", "32 / 32"],
          ["디버거", "46 / 46"],
          ["녹화", "35 / 35"],
          ["조사", "31 / 31"],
-         ["시그널", "PTY 시그널 테스트 통과"],
+         ["시그널", "PTY 테스트 통과"],
      ]),
 
     ("pagebreak",),
-    ("h1", "2. 설계 구성 요소"),
-    ("h2", "2.1 시스템 구조"),
+    ("h1", "2. 설계"),
+    ("h2", "2.1 전체 구조"),
     ("code", """+---------------------------- 사용자 터미널 ----------------------------+
 |  stdin/stdout/stderr, Ctrl-C(SIGINT), Ctrl-Z(SIGQUIT)              |
 +----------------------------------+---------------------------------+
@@ -125,7 +145,7 @@ BLOCKS: list[tuple] = [
                          |                   |
           +--------------v------+   +--------v------------------+
           | builtin.c + cmd_*.c |   | execvp() : 외부 명령      |
-          | 11개 명령 + 관찰 도구 |   | (/bin/ls, date, ...)      |
+          | 11개 명령 + 도구     |   | (/bin/ls, date, ...)      |
           +--------------+------+   +---------------------------+
                          |
           +--------------v--------------+
@@ -137,106 +157,187 @@ BLOCKS: list[tuple] = [
           | dbg / inspect / rec         |
           +-----------------------------+"""),
 
-    ("h2", "2.2 모듈 구성"),
+    ("h2", "2.2 모듈"),
     ("table",
      ["파일", "역할"],
      [
-         ["include/myshell.h", "공용 구조체와 함수 원형"],
-         ["src/main.c", "REPL, 명령 분리, 시그널, 터미널"],
-         ["src/parser.c", "토큰화, 확장, 문법 분석"],
-         ["src/execute.c", "fork/exec, 파이프, 재지향, 캡처"],
-         ["src/jobs.c", "백그라운드 작업"],
-         ["src/builtin.c", "내장 명령 디스패치"],
-         ["src/cmd_ls.c", "ls"],
-         ["src/cmd_fs.c", "mkdir/rmdir/ln/cp/rm/mv"],
-         ["src/cmd_text.c", "cat/grep"],
-         ["src/cmd_explain.c", "파서 시각화"],
+         ["include/myshell.h", "공용 상수, 구조체, 함수 원형"],
+         ["src/main.c", "REPL, 명령 분리, 시그널, 터미널/프로세스 그룹"],
+         ["src/parser.c", "토큰화, 따옴표/변수/$(...) 확장, 문법 분석"],
+         ["src/execute.c", "fork/exec, 파이프, 재지향, 명령 치환 캡처"],
+         ["src/jobs.c", "백그라운드 작업 테이블과 좀비 회수"],
+         ["src/builtin.c", "내장 명령 디스패치와 cd/echo/exit/jobs/wait"],
+         ["src/cmd_ls.c", "ls 구현"],
+         ["src/cmd_fs.c", "mkdir, rmdir, ln, cp, rm, mv"],
+         ["src/cmd_text.c", "cat, grep"],
+         ["src/cmd_explain.c", "파서 결과 시각화"],
          ["src/cmd_pipestat.c", "파이프 단계 계측"],
          ["src/cmd_trace.c", "ptrace 시스템 호출 추적"],
-         ["src/cmd_dbg.c", "ELF/ptrace 미니 디버거"],
+         ["src/cmd_dbg.c", "ELF/ptrace 디버거"],
          ["src/cmd_inspect.c", "/proc 기반 프로세스 조사"],
          ["src/cmd_rec.c", "세션 녹화/재생/HTML"],
-         ["src/util.c", "공용 유틸"],
          ["src/trace_syscalls.h", "시스템 호출 이름 테이블 (생성)"],
+         ["src/util.c", "메모리, 경로, 파일 복사/삭제, 모드/크기 출력"],
      ]),
 
-    ("h2", "2.3 핵심 자료구조"),
+    ("h2", "2.3 자료구조"),
     ("table",
      ["구조체", "주요 필드", "역할"],
      [
-         ["command_t", "argv[], argc, redir", "한 명령의 인자/재지향"],
-         ["pipeline_t", "commands[], background, text", "파이프 묶음"],
-         ["job_t", "pgid, pids[], status, command", "백그라운드 작업"],
-         ["shell_state_t", "last_status, jobs[], positional[]", "쉘 상태"],
-         ["tracee_t", "pid, entered, nr, args[6]", "ptrace 추적 상태"],
-         ["dbg_t", "pid, bias, symbols[], breakpoints[]", "디버거 상태"],
-         ["rec_item_t", "cmd, out, err, status, ms", "녹화 명령 하나"],
+         ["redirect_t", "in_path, out_path, err_path, append, merge",
+          "한 명령의 입출력/에러 재지향"],
+         ["command_t", "argv[], argc, redir", "한 명령의 인자와 재지향"],
+         ["pipeline_t", "commands[], ncommands, background, text",
+          "파이프로 연결된 명령 묶음"],
+         ["command_list_t", "pipelines[], connectors[], npipelines",
+          "&&/||/;로 연결된 명령 목록"],
+         ["job_t", "id, pgid, pids[], done[], running, status, command",
+          "백그라운드 작업의 프로세스 그룹과 상태"],
+         ["shell_state_t", "last_status, jobs[], positional[]",
+          "쉘의 종료 상태와 작업 테이블"],
+         ["tracee_t", "pid, entered, nr, args[6], string_arg",
+          "ptrace 추적 중인 프로세스의 호출 상태"],
+         ["dbg_t / dbg_bp_t", "pid, bias, symbols[], breakpoints[], orig_word",
+          "디버거의 ELF 심볼, PIE 기준 주소, 브레이크포인트"],
+         ["rec_item_t", "cmd, out, err, diag, status, ms",
+          "녹화된 명령 하나의 출력과 메타데이터"],
      ]),
 
-    ("h2", "2.4 핵심 설계"),
-    ("h3", "2.4.1 파싱과 실행"),
-    ("p", "main.c의 find_separator()가 따옴표를 고려해 ;와 &를 분리하고, "
-          "parser.c가 단어/연산자를 토큰화한다. 따옴표, $VAR, $?, $$, $!, "
-          "$(...)를 확장하고 파이프/재지향/&&/||/glob을 처리한다. cd, exit, "
-          "jobs, wait, export처럼 쉘 상태를 바꾸는 내장 명령은 부모에서, "
-          "나머지는 자식에서 실행한다."),
-    ("h3", "2.4.2 시그널과 작업 제어"),
-    ("p", "전경 파이프라인은 하나의 프로세스 그룹으로 묶고 tcsetpgrp()로 "
-          "터미널을 넘긴다. 자식은 SIGINT/SIGQUIT 등을 기본값으로 복원하므로 "
-          "Ctrl-C/Ctrl-Z는 전경 작업만 중단한다. 과제 명세에 맞춰 VQUIT를 "
-          "Ctrl-Z로 매핑하고 VSUSP를 비활성화한다."),
-    ("h3", "2.4.3 explain"),
-    ("p", "parse_line() 결과를 실행하지 않고 파이프라인, 명령, 재지향, "
-          "백그라운드 구조로 출력한다. “쉘이 입력을 어떻게 해석했는가”를 "
-          "보여 주는 기본 도구이다."),
-    ("h3", "2.4.4 pipestat"),
-    ("p", "파이프 단계 사이에 relay 프로세스를 넣어 바이트 수, 시작/종료 시각, "
-          "종료 코드를 수집한다. 어느 단계가 데이터를 많이 만들고 오래 걸리는지 "
-          "보여 주어 파이프라인 학습에 사용한다."),
-    ("h3", "2.4.5 trace"),
-    ("p", "PTRACE_TRACEME로 자식을 띄우고 PTRACE_SYSCALL로 진입/종료를 반복한다. "
-          "GETREGS로 시스템 호출 번호/인자/반환값을 읽고, 경로 인자는 PEEKDATA로 "
-          "문자열을 읽는다. -c 요약, -f 자식 추적, -e 필터를 제공한다."),
-    ("h3", "2.4.6 dbg"),
-    ("p", "ELF .symtab/.dynsym에서 함수 심볼을 읽고, PIE는 /proc/PID/maps에서 "
-          "로드 기준 주소를 계산한다. 0xCC(int3) 브레이크포인트를 심고, 정지 시 "
-          "원본 바이트를 복원한 뒤 rip를 1 되돌린다. step/continue에서 한 명령을 "
-          "실행한 후 브레이크포인트를 다시 심는다. regs, x/Nx, bt, finish, "
-          "SIGSEGV 자동 분석을 지원한다."),
-    ("h3", "2.4.7 inspect"),
-    ("p", "inspect는 /proc/PID/status, fd, maps, ns와 프로세스 트리를 읽어 상태를 "
-          "보여 준다. 쉘 자신의 pid/ppid/pgid/sid, uid/gid, cwd, umask, "
-          "rlimit, 백그라운드 작업도 함께 출력한다. 시스템 프로그래밍에서 "
-          "프로세스와 파일 디스크립터가 어떻게 표현되는지 직접 확인하는 도구이다."),
-    ("h3", "2.4.8 rec/replay"),
+    ("h2", "2.4 실행 흐름"),
+    ("h3", "2.4.1 입력과 파싱"),
+    ("p", "main.c의 find_separator()가 따옴표와 이스케이프를 고려해 최상위 ;와 "
+          "&를 찾고, 각 세그먼트를 parser.c로 넘긴다. parser.c는 단어와 연산자를 "
+          "분리하고 작은따옴표(문자 그대로), 큰따옴표($ 확장 허용), 백슬래시를 "
+          "처리한다. $VAR, ${VAR}, $?, $$, $!, $(...)를 확장하고, 인용되지 않은 "
+          "*, ?, []는 glob()으로 전개한다."),
+    ("p", "문법은 명령 목록, 파이프라인, 명령, 재지향으로 나뉜다. &&와 ||는 "
+          "connector_t로 기록되어 execute_command_list()가 직전 종료 상태에 따라 "
+          "실행 여부를 결정한다. 2>, 2>>, 2>&1, &>, &>>는 redirect_t에 저장된다."),
+    ("code", """list     := pipeline ((';' | '&') pipeline)*
+pipeline := command ('|' command)*
+command  := word+ redirect*"""),
+
+    ("h3", "2.4.2 프로세스와 재지향"),
+    ("p", "파이프라인은 명령 수만큼 pipe()와 fork()를 사용한다. 첫 자식이 "
+          "setpgid(0, 0)로 프로세스 그룹을 만들고 이후 자식과 부모가 같은 pgid에 "
+          "참여한다. 부모는 tcsetpgrp()로 터미널 전경 그룹을 자식에게 넘기고, "
+          "모든 자식의 waitpid() 결과를 수집한 뒤 다시 쉘 그룹으로 복원한다."),
+    ("p", "재지향은 파이프 연결 뒤에 적용된다. open()/dup2()로 표준 fd를 바꾸고 "
+          "원래 fd를 닫는다. 2>&1은 stdout을 stderr에 복제하고, &>는 stdout과 "
+          "stderr를 같은 파일로 보낸다. 내장 명령 중 cd, exit, jobs, wait, "
+          "export처럼 쉘 상태를 바꾸는 명령은 부모에서 실행하며, 재지향이 있으면 "
+          "fd를 저장·복원한다."),
+
+    ("h3", "2.4.3 시그널과 작업 제어"),
+    ("p", "쉘은 SIGINT/SIGQUIT/SIGTERM/SIGHUP 핸들러를 설치한다. 전경 작업 중에는 "
+          "터미널 전경 그룹이 자식이므로 Ctrl-C는 자식에게 전달되고, 자식은 "
+          "fork 직후 SIGINT/SIGQUIT/SIGTSTP 등을 기본값으로 복원한다. 백그라운드 "
+          "작업은 job_t에 등록하고 waitpid(WNOHANG)로 주기적으로 회수한다."),
+    ("p", "과제 명세의 Ctrl-Z=SIGQUIT을 맞추기 위해 termios의 VQUIT를 0x1A로 "
+          "설정하고 VSUSP를 비활성화한다. 쉘 종료 시 저장한 termios를 복원한다."),
+
+    ("h3", "2.4.4 내장 명령"),
+    ("p", "11개 필수 명령은 cmd_ls.c, cmd_fs.c, cmd_text.c에 구현되어 있다. "
+          "ls는 opendir/readdir/lstat를 사용하고 -a, -l, -R, -h를 지원한다. "
+          "cp/rm/mv는 재귀 처리와 경로 검사를 포함하고, cat은 -n/-b/-E/-T, "
+          "grep은 POSIX regex와 -i/-v/-n/-c/-l/-r/-E/-F/-q 등을 지원한다. "
+          "echo, export, unset, jobs, wait, help, true, false, :는 builtin.c에 있다."),
+
+    ("h3", "2.4.5 explain"),
+    ("p", "explain은 parse_line()을 실행하되 명령을 실행하지 않고, 파이프라인·"
+          "명령·재지향·백그라운드·연결자 구조를 출력한다. 예를 들어 "
+          "cat a.txt | grep hello > out.txt는 두 개의 명령과 stdout 재지향을 "
+          "가진 파이프라인으로 표시된다. 파서가 입력을 어떻게 해석했는지 확인하는 "
+          "도구이다."),
+    ("code", """explain: 1 pipeline(s)
+
+[pipeline 1] foreground (first)
+  ├─ cmd: cat a.txt
+  └─ cmd: grep hello
+       ├─ stdout → out.txt (truncate)"""),
+
+    ("h3", "2.4.6 pipestat"),
+    ("p", "pipestat는 각 파이프 단계와 다음 단계 사이에 relay 프로세스를 넣는다. "
+          "relay는 데이터를 전달하면서 바이트 수를 세고, 부모는 단계별 시작/종료 "
+          "시각과 종료 코드를 수집한다. 출력은 단계 번호, 명령, 바이트 수, "
+          "소요 시간, 상태로 구성된다."),
+    ("code", """shell> pipestat 'echo hello | cat | wc -c'
+6
+
+[1] echo hello: 6 bytes, 0.000s, status 0
+[2] cat: 6 bytes, 0.000s, status 0
+[3] wc -c: 2 bytes, 0.003s, status 0"""),
+
+    ("h3", "2.4.7 trace"),
+    ("p", "trace는 자식에서 PTRACE_TRACEME 후 SIGSTOP으로 멈추고, 부모가 "
+          "PTRACE_SETOPTIONS와 PTRACE_SYSCALL로 추적을 시작한다. 시스템 호출 "
+          "진입/종료 정지에서 PTRACE_GETREGS로 orig_rax, 인자 레지스터, rax를 "
+          "읽는다. 경로 인자는 PTRACE_PEEKDATA로 자식 메모리를 읽어 문자열로 "
+          "표시한다. -c는 호출 횟수 요약, -f는 fork/vfork/clone 자식 추적, -e는 "
+          "이름 필터이다. 이름 테이블은 생성된 trace_syscalls.h를 사용한다."),
+    ("code", """shell> trace -e write /bin/echo hi
+hi
+write(1, 0x..., 3) = 3"""),
+
+    ("h3", "2.4.8 dbg"),
+    ("p", "dbg는 ELF64의 .symtab(없으면 .dynsym)에서 함수 심볼을 읽는다. PIE "
+          "실행 파일은 /proc/PID/maps에서 로드 기준 주소를 계산해 심볼 주소에 "
+          "더한다. break는 대상 주소의 첫 바이트를 0xCC(int3)로 바꾸고, 정지하면 "
+          "원래 바이트를 복원한 뒤 rip를 1 되돌린다. step/continue는 한 명령을 "
+          "실행한 뒤 0xCC를 다시 심는다. finish는 프레임의 복귀 주소에 임시 "
+          "브레이크포인트를 설치한다. bt는 rbp 체인을 따라 반환 주소를 심볼로 "
+          "바꾸고, SIGSEGV 등에서는 rip와 백트레이스를 자동 출력한다."),
+    ("code", """shell> dbg ./a.out
+(dbg) break main
+Breakpoint 1 at 0x401148 (main)
+(dbg) run
+Breakpoint 1, 0x401148 in main ()
+(dbg) regs
+rip=0x401148 rsp=0x7fffffffe4d8 rbp=0x7fffffffe580
+(dbg) bt
+#0  0x401148 in main ()
+(dbg) step
+Stopped at 0x40114c in main ()
+(dbg) continue
+v=42
+[Inferior exited with status 0]"""),
+
+    ("h3", "2.4.9 inspect"),
+    ("p", "inspect는 /proc를 읽어 쉘과 다른 프로세스의 상태를 보여 준다. 기본 "
+          "출력은 pid/ppid/pgid/sid, uid/gid, cwd, hostname, umask, rlimit, "
+          "status, fd, maps, namespace이다. -f는 fd, -m은 memory map, -n은 "
+          "namespace, -j는 jobs, -s는 status, -t는 process tree만 출력한다."),
+    ("p", "process tree는 /proc/*/stat의 comm, state, ppid를 읽고 루트 PID의 "
+          "자식을 재귀적으로 따라간다. 예를 들어 백그라운드 sleep을 실행한 "
+          "직후 inspect -t를 호출하면 쉘 아래에 sleep 프로세스가 표시된다."),
+    ("code", """shell> sleep 2 & inspect -t; wait
+process tree (root=...):
+myshell (...) [R]
+  sleep (...) [R]"""),
+
+    ("h3", "2.4.10 rec/replay"),
     ("p", "rec는 전경 명령의 stdout/stderr를 relay 프로세스로 실시간 중계하면서 "
-          "동시에 임시 파일에 기록한다. 백그라운드(&) 명령은 지연 캡처 경로로 "
-          "처리한다. replay는 명령을 재실행하지 않고 출력과 상태를 재생하며, "
-          "rec export는 단독 HTML 타임라인을 만든다. -x는 explain과 trace -c "
+          "임시 파일에도 기록한다. 명령이 끝나면 명령, stdout, stderr, 종료 코드, "
+          "소요 시간을 길이 기반 레코드로 저장한다. 백그라운드(&) 명령은 지연 "
+          "캡처 경로를 사용한다. replay는 명령을 다시 실행하지 않고 저장된 출력과 "
+          "상태를 재표시하며, -s로 지연을 조절한다. rec export는 같은 레코드를 "
+          "단독 HTML 타임라인으로 변환한다. rec start -x는 explain과 trace -c "
           "요약을 추가한다."),
-    ("code", """record: C/O/E/S/T/X (명령, stdout, stderr, 상태, ms, 진단)
-replay: 저장된 출력/상태/시간을 재표시 (부작용 없음)
-export: HTML + inline CSS, 서버 불필요"""),
+    ("code", """shell> rec start lab.rec
+recording to lab.rec
+shell> echo hello
+hello
+shell> rec stop
+recording stopped: lab.rec (2 commands)
+shell> replay lab.rec -s 0
+$ echo hello
+hello
+[status=0, ...ms]"""),
 
     ("pagebreak",),
     ("h1", "3. 설계 제한 요소"),
-    ("table",
-     ["제한 요소", "설계 기준", "본 프로젝트의 대응"],
-     [
-         ["경제성", "1,000~10,000줄 원칙",
-          "직접 작성 8,626줄, 생성 포함 8,763줄로 준수"],
-         ["안정성", "외부 환경 변화에도 동작",
-          "오류 반환값 검사, 좀비 회수, 재지향 복구, 263개 자동 테스트"],
-         ["생산성", "학습/응용 가능",
-          "11개 명령 + explain/pipestat/trace/dbg/inspect/rec"],
-         ["윤리성", "안전한 파일 동작",
-          "rm의 /·.·.. 보호, system()/popen() 미사용, MIT 라이선스"],
-         ["표준성", "POSIX/Linux 인터페이스",
-          "fork, execvp, waitpid, pipe, dup2, signal, termios, dirent, regex"],
-     ]),
-
     ("h2", "3.1 경제성"),
-    ("p", "소스 규모 산정 기준은 다음과 같다."),
+    ("p", "소스 규모는 다음 기준으로 계산했다."),
     ("table",
      ["항목", "줄 수"],
      [
@@ -246,27 +347,33 @@ export: HTML + inline CSS, 서버 불필요"""),
          ["주석·빈 줄 제외 코드", "7,455"],
          ["생성된 trace_syscalls.h", "137"],
          ["테스트 코드(별도)", "1,214"],
-         ["생성 포함 총계", "8,763"],
-         ["생성·테스트 포함 총계", "9,977"],
+         ["제품 소스 합계", "8,763"],
+         ["전체 합계", "9,977"],
      ]),
-    ("p", "헤더와 기능별 소스를 분리해 빌드와 유지보수가 쉽도록 구성했다."),
+    ("p", "기능별 파일 분리와 공통 util 사용으로 모듈 간 결합을 줄였다. 외부 "
+          "라이브러리 없이 libc/POSIX 인터페이스만 사용해 빌드 의존성을 최소화했다."),
 
     ("h2", "3.2 안정성"),
-    ("p", "모든 시스템 콜의 반환값을 검사하고, 백그라운드 작업은 waitpid(WNOHANG)로 "
-          "회수한다. 재지향 실패 시 fd를 복원하고, 쉘 종료 시 termios를 복구한다. "
-          "기능·확장·추적·디버거·녹화·조사 테스트와 PTY 시그널 테스트로 회귀를 "
-          "확인했다."),
+    ("p", "시스템 호출과 라이브러리 호출의 반환값을 검사하고 errno를 포함한 "
+          "메시지를 출력한다. 백그라운드 작업은 주기적으로 회수하고 종료 시 "
+          "정리한다. 파이프/재지향 실패 시 fd를 복원하고, 터미널 종료 시 termios를 "
+          "복구한다. 기능·확장·추적·디버거·녹화·조사 테스트로 회귀를 확인한다."),
 
     ("h2", "3.3 생산성"),
-    ("p", "11개 명령은 외부 프로그램 없이 동작한다. explain/pipestat/trace/dbg/"
-          "inspect는 “왜 이런 결과가 나왔는가”를 단계별로 보여 주어 시스템 "
-          "프로그래밍 학습 시간을 줄인다. rec는 실습 과정을 HTML로 제출해 "
-          "채점자가 서버 없이 재현할 수 있게 한다."),
+    ("p", "11개 명령은 외부 프로그램 호출 없이 동작한다. explain과 pipestat은 "
+          "파이프라인 구조와 단계별 비용을, trace와 dbg는 시스템 호출과 ELF 실행을, "
+          "inspect는 /proc 상태를, rec은 세션 전체를 보여 준다. 실행 결과를 HTML로 "
+          "남길 수 있어 별도 서버 없이 확인할 수 있다."),
 
-    ("h2", "3.4 윤리성과 사회적 영향"),
+    ("h2", "3.4 윤리성"),
     ("p", "rm은 /, ., ..를 거부하고 재귀 삭제는 심볼릭 링크를 따라가지 않는다. "
-          "외부 명령은 execvp()로 직접 실행하며 system()/popen()을 쓰지 않는다. "
-          "MIT 라이선스로 수정·배포를 허용한다."),
+          "외부 명령은 execvp()로 직접 실행하며 system()/popen()을 사용하지 않는다. "
+          "MIT 라이선스로 수정과 재배포를 허용한다."),
+
+    ("h2", "3.5 표준성과 이식성"),
+    ("p", "POSIX/Linux 시스템 콜과 C 라이브러리를 사용한다. Ubuntu 26.04 WSL2와 "
+          "gcc 15.2에서 빌드·검증했으며, 터미널 제어와 ptrace 기능은 Linux "
+          "환경을 전제로 한다."),
 
     ("pagebreak",),
     ("h1", "4. 구현 및 검증"),
@@ -274,19 +381,46 @@ export: HTML + inline CSS, 서버 불필요"""),
     ("table",
      ["요구사항", "구현", "검증"],
      [
-         ["1. exit", "builtin_exit, $?", "종료 상태 테스트"],
-         ["2. &", "job_t, setpgid, jobs/wait/$!", "조기 복귀/jobs/wait"],
-         ["3. Ctrl-C/Ctrl-Z", "SIGINT/SIGQUIT, 전경 프로세스 그룹", "PTY 시그널 테스트"],
-         ["4. 재지향/파이프", "open/dup2/pipe, 다단 파이프", "파일 비교/2>&1/파이프"],
-         ["5. 11개 명령", "cmd_ls/cmd_fs/cmd_text", "94개 기능 테스트"],
+         ["1. exit", "builtin_exit, $?, 종료 상태 저장", "exit 7 후 상태 7"],
+         ["2. &", "job_t, setpgid, jobs/wait/$!", "백그라운드 조기 복귀, jobs/wait"],
+         ["3. Ctrl-C/Ctrl-Z", "SIGINT/SIGQUIT, 전경 프로세스 그룹, VQUIT 매핑", "PTY 시그널 테스트"],
+         ["4. 재지향/파이프", "open/dup2/pipe, 2>&1, 다단 파이프", "파일 비교/에러 분리/파이프"],
+         ["5. 11개 명령", "cmd_ls/cmd_fs/cmd_text, 옵션 처리", "94개 기능 테스트"],
      ]),
-    ("h2", "4.2 테스트 설계"),
-    ("p", "tests/run_tests.sh는 stdout/stderr/종료 상태를 비교하는 94개 기능 "
-          "테스트를 수행한다. test_ext는 explain/&&/glob/pipestat 21개, "
-          "test_file_input은 4개, test_trace는 32개, test_dbg는 44개, "
-          "test_rec는 35개, test_inspect는 31개를 검사한다. test_signals.py는 "
-          "pty.fork()로 Ctrl-C/Ctrl-Z 후 쉘 생존을 확인한다."),
-    ("h2", "4.3 테스트 결과"),
+
+    ("h2", "4.2 도구별 검증"),
+    ("table",
+     ["도구", "검증 내용", "테스트"],
+     [
+         ["explain", "파이프/재지향/백그라운드 구조 출력", "확장 테스트"],
+         ["pipestat", "단계별 바이트/시간/종료 코드", "확장 테스트"],
+         ["trace", "write/openat/read/execve/exit_group, -c/-f/-e", "추적 32개"],
+         ["dbg", "break/run/step/finish/bt/regs/x, PIE, SIGSEGV", "디버거 46개"],
+         ["inspect", "status/fd/maps/ns/tree/jobs/limits", "조사 31개"],
+         ["rec/replay", "출력/상태/시간, HTML, -x, 오류", "녹화 35개"],
+     ]),
+
+    ("h2", "4.3 테스트 방법"),
+    ("p", "기능 테스트는 쉘을 -c로 실행해 stdout, stderr, 종료 상태를 기대값과 "
+          "비교한다. 파일 시스템 테스트는 임시 디렉터리에서 수행하고 종료 후 "
+          "삭제한다. PTY 테스트는 pty.fork()로 가상 터미널을 만들고 Ctrl-C와 "
+          "Ctrl-Z를 전송해 쉘 생존과 프롬프트 복귀를 확인한다. 실행 권한은 "
+          "tests/ 아래 스크립트에 100755로 설정되어 있다."),
+
+    ("h2", "4.4 테스트 결과"),
+    ("table",
+     ["영역", "개수", "결과"],
+     [
+         ["기능", "94", "통과"],
+         ["파일 입력", "4", "통과"],
+         ["확장(explain/&&/glob/pipestat)", "21", "통과"],
+         ["시스템 호출 추적", "32", "통과"],
+         ["디버거", "46", "통과"],
+         ["녹화/재생", "35", "통과"],
+         ["프로세스 조사", "31", "통과"],
+         ["PTY 시그널", "1 시나리오", "통과"],
+         ["합계", "263", "통과"],
+     ]),
     ("code", """Passed: 94
 File-input tests passed: 4
 Extension tests passed: 21
@@ -296,71 +430,109 @@ Recording tests passed: 35
 Inspect tests passed: 31
 SIGNAL TEST PASSED"""),
 
+    ("h2", "4.5 실행 예시"),
+    ("code", """shell> explain 'cat a.txt | grep hello > out.txt'
+explain: 1 pipeline(s)
+[pipeline 1] foreground (first)
+  ├─ cmd: cat a.txt
+  └─ cmd: grep hello
+       ├─ stdout → out.txt (truncate)
+
+shell> pipestat 'echo hello | cat | wc -c'
+6
+[1] echo hello: 6 bytes, 0.000s, status 0
+[2] cat: 6 bytes, 0.000s, status 0
+[3] wc -c: 2 bytes, 0.003s, status 0
+
+shell> trace -e write /bin/echo hi
+hi
+write(1, 0x..., 3) = 3
+
+shell> inspect -t
+process tree (root=...):
+myshell (...) [R]"""),
+
     ("pagebreak",),
     ("h1", "5. 프로젝트 결과"),
-    ("h2", "5.1 구현 내용"),
+    ("h2", "5.1 구현 현황"),
     ("table",
      ["기능", "상태", "검증"],
      [
-         ["필수 요구사항 1~5", "완료", "94개 기능 + PTY"],
-         ["11개 내장 명령", "완료", "ls/pwd/cd/…/grep"],
-         ["explain", "완료", "파이프/재지향 도식"],
-         ["pipestat", "완료", "단계별 바이트/시간/상태"],
-         ["trace", "완료", "시스템 호출/필터/요약"],
-         ["dbg", "완료", "ELF/PIE, break/step/bt, SIGSEGV"],
-         ["inspect", "완료", "/proc status/fd/maps/ns/tree"],
-         ["rec/replay", "완료", "출력/상태/시간, HTML"],
+         ["exit / & / signals / redirection / pipe", "완료", "기능 94"],
+         ["11개 필수 명령", "완료", "기능 94"],
+         ["explain / pipestat", "완료", "확장 21"],
+         ["trace", "완료", "추적 32"],
+         ["dbg", "완료", "디버거 46"],
+         ["inspect + process tree", "완료", "조사 31"],
+         ["rec / replay / HTML", "완료", "녹화 35"],
      ]),
-    ("h2", "5.2 완성도 평가"),
-    ("p", "원 과제 요구사항과 11개 명령을 모두 유지했고, 8,763줄로 구성했다. "
-          "263개 자동 테스트와 PTY 시그널 테스트가 통과했다."),
 
-    ("h2", "5.3 일정/역할/위험"),
+    ("h2", "5.2 요구사항 충족"),
+    ("p", "원 과제의 5개 요구사항과 11개 내장 명령을 모두 구현했고, 94개 기능 "
+          "테스트로 확인했다. 추가 도구는 별도 테스트로 검증했으며, 전체 제품 "
+          "소스와 테스트는 9,977줄이다."),
+
+    ("h2", "5.3 일정"),
     ("table",
-     ["주차", "류동엽", "강동우", "증빙"],
+     ["주차", "류동엽", "강동우", "산출물"],
      [
          ["11주", "simplesh 분석, 요구사항/파서 설계", "파일/텍스트 명령 분석", "요구사항 표"],
-         ["12주", "토큰화/확장/파이프/재지향", "ls/mkdir/rmdir 초안", "parser.c/execute.c"],
-         ["13주", "프로세스 그룹/시그널", "ln/cp/rm/mv 경계", "PTY 테스트"],
-         ["14주", "11개 명령 통합, 94개 테스트", "cat/grep 옵션", "Passed: 94"],
-         ["15주", "explain/pipestat/trace/dbg/inspect/rec", "테스트/문서/PTY", "기능별 커밋"],
+         ["12주", "토큰화/확장/파이프/재지향", "ls/mkdir/rmdir 구현", "parser.c, execute.c"],
+         ["13주", "프로세스 그룹/시그널/작업 제어", "ln/cp/rm/mv 경계 처리", "PTY 테스트"],
+         ["14주", "11개 명령 통합, 기능 테스트", "cat/grep 옵션", "Passed: 94"],
+         ["15주", "explain/pipestat/trace/dbg/inspect/rec", "테스트/문서/PTY", "도구별 테스트"],
      ]),
+
+    ("h2", "5.4 역할"),
+    ("table",
+     ["팀원", "학번", "담당"],
+     [
+         ["류동엽", "20223154", "쉘 코어, 파서/실행기, 시그널, explain/pipestat/trace/dbg/inspect/rec, pwd/cd/ls/mkdir/rmdir"],
+         ["강동우", "20223080", "ln/cp/rm/mv/cat/grep, 테스트, 문서, PTY 검증"],
+     ]),
+    ("p", "명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, "
+          "cat, grep)로 나누었다. 두 사람이 서로의 테스트를 실행해 통합 오류를 "
+          "확인했다."),
+
+    ("h2", "5.5 위험 처리"),
     ("table",
      ["위험", "대응", "결과"],
      [
-         ["Ctrl-C가 쉘까지 종료", "자식 setpgid + tcsetpgrp", "PTY 통과"],
-         ["ptrace 차단", "자기 자식만 PTRACE_TRACEME", "WSL2 통과"],
+         ["전경 작업 시그널", "setpgid + tcsetpgrp, 자식 신호 기본값 복원", "PTY 통과"],
+         ["좀비 프로세스", "waitpid(WNOHANG) 주기 회수, wait 내장", "jobs 테스트"],
+         ["파일 디스크립터 누수", "dup2 후 close, 재지향 실패 복원", "기능 테스트"],
          ["PIE 주소 불일치", "/proc/PID/maps bias 계산", "dbg PIE 테스트"],
-         ["브레이크포인트 재정지", "복원→SINGLESTEP→재설치", "dbg 통과"],
-         ["백그라운드 녹화", "전경은 relay, & 명령은 지연 캡처", "rec 통과"],
-         ["인터럽트/시스템 호출", "SIGINT/SIGQUIT 처리, ptrace 추적", "PTY/추적 테스트"],
+         ["브레이크포인트 재정지", "원본 복원→SINGLESTEP→재설치", "dbg step/continue"],
+         ["ptrace 차단", "PTRACE_TRACEME로 자기 자식만 추적", "WSL2 테스트"],
+         ["녹화 출력", "전경 relay, 백그라운드 지연 캡처", "rec 테스트"],
      ]),
-    ("p", "역할은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, "
-          "grep)로 나누었고, 관찰 도구/코어는 류동엽, 테스트·문서·PTY 검증은 "
-          "강동우가 담당했다."),
+
+    ("h2", "5.6 저장소"),
+    ("p", "소스, 테스트, README, LICENSE, 보고서를 GitHub에 공개했다. 저장소 "
+          "주소는 https://github.com/gong000000/lab3 이고 MIT 라이선스를 사용한다."),
 
     ("pagebreak",),
     ("h1", "부록 A. 빌드 및 실행"),
-    ("code", """make
+    ("code", """make clean
+make
 ./myshell
 ./myshell -c 'exit 7'
-./myshell -c 'explain "cat a | grep b"'
+./myshell -c 'explain "cat a | grep b > out"'
 ./myshell -c 'pipestat "echo hi | cat | wc -c"'
 ./myshell -c 'trace -e write /bin/echo hi'
-./myshell -c 'inspect'
-./myshell -c 'rec export lab.rec out.html'
+./myshell -c 'inspect -t'
 make test"""),
     ("h1", "부록 B. 테스트 항목"),
     ("table",
-     ["영역", "내용", "개수"],
+     ["영역", "주요 검사", "개수"],
      [
          ["기능", "exit, 인용/확장, 재지향, 파이프, 작업, 11개 명령, 오류", "94"],
          ["확장", "explain, &&/||, glob, pipestat", "21"],
-         ["파일 입력", "여러 줄, 마지막 줄, 백그라운드", "4"],
-         ["추적", "필터/요약/자식/문자열/오류", "32"],
-         ["디버거", "ELF/PIE, break/step/finish/bt, SIGSEGV", "44"],
+         ["파일 입력", "여러 줄 입력, 마지막 줄 중복, 백그라운드", "4"],
+         ["추적", "필터, 요약, 자식 추적, 경로 문자열, 오류", "32"],
+         ["디버거", "ELF/PIE, break/step/finish/bt, SIGSEGV", "46"],
          ["녹화", "rec/replay, 출력, HTML, -x, 오류", "35"],
-         ["조사", "/proc status/fd/maps/ns/tree/jobs/limits/오류", "31"],
+         ["조사", "status/fd/maps/ns/tree/jobs/limits", "31"],
          ["시그널", "PTY Ctrl-C/Ctrl-Z", "1 시나리오"],
      ]),
     ("h1", "부록 C. 소스 규모"),
@@ -371,18 +543,16 @@ make test"""),
          ["생성된 trace_syscalls.h", "137"],
          ["제품 소스 합계", "8,763"],
          ["테스트 코드", "1,214"],
-         ["합계", "9,977"],
+         ["전체 합계", "9,977"],
      ]),
     ("h1", "부록 D. 참고문헌"),
     ("bullets", [
         "교재 357쪽, simplesh.c (fgets/getargs/fork/execvp/wait)",
-        "Linux man pages: fork(2), execvp(3), waitpid(2), pipe(2), dup2(2), "
-        "signal(7), sigaction(2), termios(3), tcsetpgrp(3)",
-        "Linux man pages: opendir(3), readdir(3), lstat(2), link(2), symlink(2), "
-        "rename(2), unlink(2), rmdir(2)",
+        "Linux man pages: fork(2), execvp(3), waitpid(2), pipe(2), dup2(2), signal(7), sigaction(2), termios(3), tcsetpgrp(3)",
+        "Linux man pages: opendir(3), readdir(3), lstat(2), link(2), symlink(2), rename(2), unlink(2), rmdir(2)",
         "POSIX regex: regcomp(3), regexec(3), regerror(3)",
-        "Linux man pages: ptrace(2), waitpid(2) __WALL, sys/user.h",
-        "Linux man pages: proc(5), getrlimit(2), readlink(2), gethostname(2)",
+        "Linux man pages: ptrace(2), waitpid(2) __WALL, sys/user.h, proc(5)",
+        "Linux man pages: getrlimit(2), readlink(2), gethostname(2)",
         "프로젝트 저장소: https://github.com/gong000000/lab3",
     ]),
 ]
@@ -549,7 +719,7 @@ def add_cover(doc):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(12)
-    run = p.add_run("간단한 쉘(Simple Shell) 구현 및 확장")
+    run = p.add_run("시스템 프로그래밍 학습용 투명 쉘")
     set_run_font(run, FONT, 15, True, GRAY)
 
     p = doc.add_paragraph()
@@ -563,11 +733,11 @@ def add_cover(doc):
 
     rows = [
         ("과목", "오픈소스프로젝트(전공설계)"),
-        ("프로젝트", "Lab 3 - 간단한 쉘 구현 및 확장"),
+        ("프로젝트", "Lab 3 - 시스템 프로그래밍 학습용 투명 쉘"),
         ("팀명", "myshell"),
         ("팀원", "류동엽 (20223154, @gong000000)\n강동우 (20223080, @pizza0420)"),
         ("GitHub", "https://github.com/gong000000/lab3"),
-        ("제출일", "2026. 11. 18."),
+        ("제출일", "2026. 11. 19."),
     ]
     table = doc.add_table(rows=0, cols=2)
     table.style = "Table Grid"
@@ -672,16 +842,16 @@ def render_md(path):
         kind = block[0]
         if kind == "cover":
             out.append("# 프로젝트 결과보고서\n")
-            out.append("## 간단한 쉘(Simple Shell) 구현 및 확장\n")
+            out.append("## 시스템 프로그래밍 학습용 투명 쉘\n")
             out.append("**오픈소스프로젝트(전공설계) · 2026학년도 2학기**\n")
             out.append("| 항목 | 내용 |")
             out.append("|---|---|")
             out.append("| 과목 | 오픈소스프로젝트(전공설계) |")
-            out.append("| 프로젝트 | Lab 3 - 간단한 쉘 구현 및 확장 |")
+            out.append("| 프로젝트 | Lab 3 - 시스템 프로그래밍 학습용 투명 쉘 |")
             out.append("| 팀명 | myshell |")
             out.append("| 팀원 | 류동엽 (20223154, @gong000000), 강동우 (20223080, @pizza0420) |")
             out.append("| GitHub | https://github.com/gong000000/lab3 |")
-            out.append("| 제출일 | 2026. 11. 18. |")
+            out.append("| 제출일 | 2026. 11. 19. |")
             out.append("")
         elif kind == "pagebreak":
             out.append("\n---\n")
@@ -766,7 +936,7 @@ def render_html(path):
             out.append("<p style=\"text-align:center; font-size:28pt; font-weight:bold; color:#1F3864;\">프로젝트 결과보고서</p>")
             for _ in range(4):
                 out.append("<p>&nbsp;</p>")
-            out.append("<p style=\"text-align:center; font-size:15pt; font-weight:bold; color:#555555;\">간단한 쉘(Simple Shell) 구현 및 확장</p>")
+            out.append("<p style=\"text-align:center; font-size:15pt; font-weight:bold; color:#555555;\">시스템 프로그래밍 학습용 투명 쉘</p>")
             out.append("<p style=\"text-align:center; font-size:11pt; color:#666666;\">오픈소스프로젝트(전공설계) · 2026학년도 2학기</p>")
             for _ in range(6):
                 out.append("<p>&nbsp;</p>")
@@ -774,11 +944,11 @@ def render_html(path):
             out.append("<tr><th style=\"width:22%; background:#D9E2F3;\">항목</th><th style=\"background:#D9E2F3;\">내용</th></tr>")
             for key, value in (
                 ("과목", "오픈소스프로젝트(전공설계)"),
-                ("프로젝트", "Lab 3 - 간단한 쉘 구현 및 확장"),
+                ("프로젝트", "Lab 3 - 시스템 프로그래밍 학습용 투명 쉘"),
                 ("팀명", "myshell"),
                 ("팀원", "류동엽 (20223154, @gong000000)<br>강동우 (20223080, @pizza0420)"),
                 ("GitHub", "https://github.com/gong000000/lab3"),
-                ("제출일", "2026. 11. 18."),
+                ("제출일", "2026. 11. 19."),
             ):
                 out.append(f"<tr><td>{html_escape(key)}</td><td>{value}</td></tr>")
             out.append("</table>")
