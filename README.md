@@ -300,6 +300,7 @@ SIGNAL TEST PASSED
 │   └── test_signals.py
 └── docs/
     ├── REPORT.md / REPORT.docx / REPORT.hwp / REPORT.pdf
+    ├── PLAN.md
     ├── make_report.py
     ├── make_pdf.py
     └── make_hwp_text.py
