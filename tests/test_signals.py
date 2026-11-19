@@ -28,6 +28,27 @@ def read_until(fd, needle, timeout=5.0):
     raise AssertionError("timeout waiting for %r; got %r" % (needle, data))
 
 
+def drain(fd, quiet=0.3, timeout=3.0):
+    data = b""
+    deadline = time.time() + timeout
+    last = time.time()
+    while time.time() < deadline:
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if not r:
+            if time.time() - last >= quiet:
+                break
+            continue
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        data += chunk
+        last = time.time()
+    return data
+
+
 def main():
     pid, fd = pty.fork()
     if pid == 0:
@@ -38,48 +59,48 @@ def main():
 
     # Normal command.
     os.write(fd, b"echo signal-test\n")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"signal-test" in out, out
 
     # Optional extended prompt: status, elapsed time, running jobs.
     os.write(fd, b"prompt on\n")
-    out = read_until(fd, b"shell [")
+    out = drain(fd)
     assert b"shell [" in out, out
     os.write(fd, b"prompt off\n")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"shell> " in out, out
 
     # Ctrl-C while a foreground child is running: shell must survive.
     os.write(fd, b"sleep 30\n")
     time.sleep(0.3)
     os.write(fd, b"\x03")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"shell> " in out, out
 
     # Ctrl-C while cat is blocked on terminal input.
     os.write(fd, b"cat\n")
     time.sleep(0.3)
     os.write(fd, b"\x03")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"shell> " in out, out
 
     # Ctrl-Z is remapped to SIGQUIT by myshell: shell must survive.
     os.write(fd, b"sleep 30\n")
     time.sleep(0.3)
     os.write(fd, b"\x1a")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"shell> " in out, out
 
     # Ctrl-Z while cat is blocked on terminal input.
     os.write(fd, b"cat\n")
     time.sleep(0.3)
     os.write(fd, b"\x1a")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"shell> " in out, out
 
     # Ctrl-C at the prompt must not terminate the shell.
     os.write(fd, b"\x03")
-    out = read_until(fd, b"shell> ")
+    out = drain(fd)
     assert b"shell> " in out, out
 
     os.write(fd, b"exit 0\n")
@@ -88,8 +109,7 @@ def main():
             r, _, _ = select.select([fd], [], [], 0.5)
             if not r:
                 break
-            chunk = os.read(fd, 4096)
-            if not chunk:
+            if not os.read(fd, 4096):
                 break
     except OSError:
         pass

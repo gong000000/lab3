@@ -76,6 +76,212 @@ static int b_grep(int argc, char **argv, shell_state_t *sh)
     return cmd_grep(argc, argv);
 }
 
+/* ------------------------------------------------------------------ */
+/* test / [                                                           */
+/* ------------------------------------------------------------------ */
+
+static int test_unary(const char *op, const char *arg)
+{
+    struct stat st;
+
+    if (strcmp(op, "-z") == 0)
+        return arg[0] == '\0';
+    if (strcmp(op, "-n") == 0)
+        return arg[0] != '\0';
+    if (strcmp(op, "-e") == 0)
+        return stat(arg, &st) == 0;
+    if (strcmp(op, "-f") == 0)
+        return stat(arg, &st) == 0 && S_ISREG(st.st_mode);
+    if (strcmp(op, "-d") == 0)
+        return stat(arg, &st) == 0 && S_ISDIR(st.st_mode);
+    if (strcmp(op, "-r") == 0)
+        return access(arg, R_OK) == 0;
+    if (strcmp(op, "-w") == 0)
+        return access(arg, W_OK) == 0;
+    if (strcmp(op, "-x") == 0)
+        return access(arg, X_OK) == 0;
+    if (strcmp(op, "-s") == 0)
+        return stat(arg, &st) == 0 && st.st_size > 0;
+    return 0;
+}
+
+static int test_binary(const char *left, const char *op, const char *right)
+{
+    if (strcmp(op, "=") == 0 || strcmp(op, "==") == 0)
+        return strcmp(left, right) == 0;
+    if (strcmp(op, "!=") == 0)
+        return strcmp(left, right) != 0;
+    if (strcmp(op, "-eq") == 0)
+        return strtoll(left, NULL, 10) == strtoll(right, NULL, 10);
+    if (strcmp(op, "-ne") == 0)
+        return strtoll(left, NULL, 10) != strtoll(right, NULL, 10);
+    if (strcmp(op, "-lt") == 0)
+        return strtoll(left, NULL, 10) < strtoll(right, NULL, 10);
+    if (strcmp(op, "-le") == 0)
+        return strtoll(left, NULL, 10) <= strtoll(right, NULL, 10);
+    if (strcmp(op, "-gt") == 0)
+        return strtoll(left, NULL, 10) > strtoll(right, NULL, 10);
+    if (strcmp(op, "-ge") == 0)
+        return strtoll(left, NULL, 10) >= strtoll(right, NULL, 10);
+    return -1;
+}
+
+static int test_eval(char **av, int n)
+{
+    if (n <= 0)
+        return 0;
+    if (strcmp(av[0], "!") == 0)
+        return !test_eval(av + 1, n - 1);
+    if (n == 1)
+        return av[0][0] != '\0';
+    if (n == 2) {
+        if (av[0][0] == '-' && av[0][1] != '\0' && av[0][2] == '\0')
+            return test_unary(av[0], av[1]);
+        return av[0][0] != '\0';
+    }
+    if (n == 3) {
+        int rc = test_binary(av[0], av[1], av[2]);
+
+        if (rc >= 0)
+            return rc;
+    }
+    return 0;
+}
+
+static int b_test(int argc, char **argv, shell_state_t *sh)
+{
+    int bracket = strcmp(argv[0], "[") == 0;
+
+    (void)sh;
+    if (bracket) {
+        if (argc < 2 || strcmp(argv[argc - 1], "]") != 0) {
+            msh_usage("[: missing ']'");
+            return 2;
+        }
+        --argc;
+    }
+    return test_eval(argv + 1, argc - 1) ? 0 : 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* read / shift / source                                              */
+/* ------------------------------------------------------------------ */
+
+static int b_read(int argc, char **argv, shell_state_t *sh)
+{
+    char line[8192];
+    char *vars[MSH_MAX_ARGS];
+    char *fields[MSH_MAX_ARGS];
+    int nvars = 0;
+    int nfields = 0;
+    int raw = 0;
+    int i;
+    size_t len;
+    char *p;
+
+    (void)sh;
+    for (i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-r") == 0)
+            raw = 1;
+        else if (nvars < MSH_MAX_ARGS - 1)
+            vars[nvars++] = argv[i];
+    }
+
+    if (fgets(line, sizeof(line), stdin) == NULL)
+        return 1;
+    len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+        line[--len] = '\0';
+
+    if (!raw) {
+        char *src = line;
+        char *dst = line;
+
+        while (*src != '\0') {
+            if (*src == '\\' && src[1] != '\0')
+                ++src;
+            *dst++ = *src++;
+        }
+        *dst = '\0';
+    }
+
+    p = line;
+    while (*p != '\0' && nfields < MSH_MAX_ARGS - 1) {
+        while (*p == ' ' || *p == '\t')
+            ++p;
+        if (*p == '\0')
+            break;
+        fields[nfields++] = p;
+        while (*p != '\0' && *p != ' ' && *p != '\t')
+            ++p;
+        if (*p != '\0')
+            *p++ = '\0';
+    }
+
+    if (nvars == 0) {
+        setenv("REPLY", line, 1);
+        return 0;
+    }
+    for (i = 0; i < nvars; ++i) {
+        if (i < nfields)
+            setenv(vars[i], fields[i], 1);
+        else
+            setenv(vars[i], "", 1);
+    }
+    return 0;
+}
+
+static int b_shift(int argc, char **argv, shell_state_t *sh)
+{
+    int count = 1;
+
+    if (argc > 2) {
+        msh_usage("shift [n]");
+        return 2;
+    }
+    if (argc == 2)
+        count = atoi(argv[1]);
+    if (count < 0) {
+        msh_usage("shift [n]");
+        return 2;
+    }
+    if (count > sh->positional_count)
+        return 1;
+    if (sh->positional != NULL)
+        sh->positional += count;
+    sh->positional_count -= count;
+    return 0;
+}
+
+static int b_source(int argc, char **argv, shell_state_t *sh)
+{
+    char *text;
+    char **saved_args;
+    int saved_count;
+    int rc;
+
+    if (argc < 2) {
+        msh_usage("source FILE [args...]");
+        return 2;
+    }
+    text = msh_read_file(argv[1]);
+    if (text == NULL) {
+        msh_perror(argv[1]);
+        return 1;
+    }
+    saved_args = sh->positional;
+    saved_count = sh->positional_count;
+    if (argc > 2) {
+        sh->positional = argv + 2;
+        sh->positional_count = argc - 2;
+    }
+    rc = script_execute(text, sh);
+    sh->positional = saved_args;
+    sh->positional_count = saved_count;
+    free(text);
+    return rc;
+}
+
 static const builtin_entry_t builtins[] = {
     { "cd",     builtin_cd,     1 },
     { "pwd",    builtin_pwd,    0 },
@@ -106,6 +312,14 @@ static const builtin_entry_t builtins[] = {
     { "watch",   cmd_watch,     0 },
     { "prompt",  cmd_prompt,    1 },
     { "pipestat", cmd_pipestat,  0 },
+    { "history", cmd_history,   0 },
+    { "test",    b_test,        0 },
+    { "[",       b_test,        0 },
+    { "read",    b_read,        1 },
+    { "shift",   b_shift,       1 },
+    { "source",  b_source,      1 },
+    { ".",       b_source,      1 },
+    { "trace",   cmd_trace,     0 },
 };
 
 static const builtin_entry_t *find_builtin(const char *name)
@@ -510,7 +724,18 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  serve [-p PORT] [-d DIR] [-a ADDR] [-1]\n");
     printf("  watch [-n SEC] [-c COUNT] COMMAND...\n");
     printf("  prompt [on|off]\n");
-    printf("  pipestat 'command1 | command2'\n\n");
+    printf("  pipestat 'command1 | command2'\n");
+    printf("  history [-c]\n");
+    printf("  test EXPR    (or [ EXPR ])\n");
+    printf("  read [-r] VAR...  shift [N]  source FILE [ARGS...]\n");
+    printf("  trace [-c] [-f] [-e NAME[,NAME...]] COMMAND...\n\n");
+    printf("Scripting:\n");
+    printf("  $(command)  command substitution\n");
+    printf("  if CMD; then ...; elif CMD; then ...; else ...; fi\n");
+    printf("  for NAME in WORDS; do ...; done\n");
+    printf("  while CMD; do ...; done      until CMD; do ...; done\n");
+    printf("  NAME() { ...; }              break / continue / return\n");
+    printf("  myshell SCRIPT [ARGS...]\n\n");
     printf("Examples:\n");
     printf("  netserv -1 -p 9090 &\n");
     printf("  netcli -p 9090 127.0.0.1 echo hello\n");
@@ -519,6 +744,11 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  Ctrl-C  SIGINT  - interrupt the foreground job\n");
     printf("  Ctrl-Z  SIGQUIT - quit the foreground job (mapped by myshell)\n");
     printf("  Ctrl-D          - end of input / exit\n");
+    printf("  Left/Right/Home/End  - move the cursor\n");
+    printf("  Tab                  - complete commands and file names\n");
+    printf("  Ctrl-R               - reverse history search\n");
+    printf("  Ctrl-U/K/W           - delete before/after/previous word\n");
+    printf("  Up/Down              - browse history\n");
     return 0;
 }
 
@@ -555,5 +785,32 @@ int cmd_prompt(int argc, char **argv, shell_state_t *sh)
         }
     }
     printf("prompt: %s\n", sh->show_prompt_info ? "on" : "off");
+    return 0;
+}
+
+const char *const *msh_builtin_names(int *count)
+{
+    static const char *names[] = {
+        "cd", "pwd", "echo", "exit", "jobs", "wait", "export", "unset",
+        "help", "true", "false", ":", "ls", "mkdir", "rmdir", "ln",
+        "cp", "rm", "mv", "cat", "grep", "netserv", "netcli", "explain",
+        "undo", "serve", "watch", "prompt", "pipestat", "history",
+        "test", "[", "read", "shift", "source", ".", "trace"
+    };
+    *count = (int)(sizeof(names) / sizeof(names[0]));
+    return names;
+}
+
+int cmd_history(int argc, char **argv, shell_state_t *sh)
+{
+    if (argc == 2 && strcmp(argv[1], "-c") == 0) {
+        history_clear(sh);
+        return 0;
+    }
+    if (argc != 1) {
+        msh_usage("history [-c]");
+        return 2;
+    }
+    history_print(sh);
     return 0;
 }

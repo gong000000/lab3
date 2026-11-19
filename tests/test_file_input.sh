@@ -38,6 +38,9 @@ check "three lines" $'one\ntwo\nthree' "$WORK/three.msh"
 printf 'sleep 0.1 &\necho one\necho two\n' > "$WORK/bg.msh"
 check "background job followed by commands" $'one\ntwo' "$WORK/bg.msh"
 
+printf 'for i in 1 2; do\n  echo x$i\ndone\n' > "$WORK/loop.msh"
+check "multi-line loop from stdin" $'x1\nx2' "$WORK/loop.msh"
+
 echo
 echo "File-input tests passed: $PASS"
 echo "File-input tests failed: $FAIL"

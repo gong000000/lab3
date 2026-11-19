@@ -117,7 +117,18 @@ static int status_to_exit(int status)
 
 /* Run a built-in that must affect the shell itself (cd, exit, jobs, ...).
  * Redirections are applied temporarily and then restored. */
-static int run_parent_builtin(command_t *cmd, shell_state_t *sh)
+static int do_builtin(command_t *cmd, shell_state_t *sh)
+{
+    return run_builtin(cmd->argc, cmd->argv, sh, 0);
+}
+
+static int do_function(command_t *cmd, shell_state_t *sh)
+{
+    return msh_call_function(sh, cmd->argv[0], cmd->argc - 1, cmd->argv + 1);
+}
+
+static int run_parent_action(command_t *cmd, shell_state_t *sh,
+                             int (*action)(command_t *, shell_state_t *))
 {
     int saved[3] = { -1, -1, -1 };
     int redirected = has_redirections(&cmd->redir);
@@ -150,7 +161,7 @@ static int run_parent_builtin(command_t *cmd, shell_state_t *sh)
         }
     }
 
-    rc = run_builtin(cmd->argc, cmd->argv, sh, 0);
+    rc = action(cmd, sh);
     fflush(stdout);
     fflush(stderr);
 
@@ -183,7 +194,12 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh)
         command_t *cmd = &pl->commands[0];
 
         if (is_parent_builtin(cmd->argv[0])) {
-            int rc = run_parent_builtin(cmd, sh);
+            int rc = run_parent_action(cmd, sh, do_builtin);
+            sh->last_status = rc;
+            return rc;
+        }
+        if (msh_is_function(sh, cmd->argv[0])) {
+            int rc = run_parent_action(cmd, sh, do_function);
             sh->last_status = rc;
             return rc;
         }
@@ -239,6 +255,14 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh)
 
             if (apply_redirections(&cmd->redir) < 0)
                 _exit(1);
+
+            if (msh_is_function(sh, cmd->argv[0])) {
+                int rc = msh_call_function(sh, cmd->argv[0],
+                                           cmd->argc - 1, cmd->argv + 1);
+                fflush(stdout);
+                fflush(stderr);
+                _exit(rc);
+            }
 
             if (is_builtin(cmd->argv[0])) {
                 int rc = run_builtin(cmd->argc, cmd->argv, sh, 1);
@@ -366,4 +390,98 @@ int execute_command_list(command_list_t *list, shell_state_t *sh)
     }
     sh->last_status = last;
     return last;
+}
+
+/* Parse and execute a single statement that is already split on ';', '&',
+ * and newlines.  The script interpreter uses this for command nodes. */
+int msh_execute_simple(const char *text, shell_state_t *sh)
+{
+    command_list_t list;
+    char *error = NULL;
+    int status;
+
+    if (parse_line(text, sh, &list, &error) < 0) {
+        msh_error("syntax error: %s", error != NULL ? error : "bad input");
+        free(error);
+        sh->last_status = 2;
+        return 2;
+    }
+    if (list.npipelines == 0) {
+        free_command_list(&list);
+        return sh->last_status;
+    }
+    status = execute_command_list(&list, sh);
+    free_command_list(&list);
+    return status;
+}
+
+/* Capture the standard output of a command substitution.  Returns 0 when
+ * the output was captured, even if the command itself failed. */
+int msh_capture_command(const char *command, shell_state_t *sh, char **output)
+{
+    int pipefd[2];
+    pid_t pid;
+    char *buf = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+    char chunk[4096];
+    ssize_t n;
+    int status = 0;
+
+    *output = NULL;
+    if (pipe(pipefd) < 0) {
+        msh_perror("pipe");
+        return 1;
+    }
+    pid = fork();
+    if (pid < 0) {
+        msh_perror("fork");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return 1;
+    }
+    if (pid == 0) {
+        int rc;
+
+        close(pipefd[0]);
+        if (dup2(pipefd[1], STDOUT_FILENO) < 0)
+            _exit(1);
+        close(pipefd[1]);
+        reset_child_signals();
+        sh->interactive = 0;
+        rc = shell_execute_line(command, sh);
+        fflush(stdout);
+        fflush(stderr);
+        _exit(rc);
+    }
+
+    close(pipefd[1]);
+    for (;;) {
+        n = read(pipefd[0], chunk, sizeof(chunk));
+        if (n > 0) {
+            if (len + (size_t)n + 1 > cap) {
+                size_t newcap = cap ? cap * 2 : 256;
+
+                while (newcap < len + (size_t)n + 1)
+                    newcap *= 2;
+                buf = msh_realloc(buf, newcap);
+                cap = newcap;
+            }
+            memcpy(buf + len, chunk, (size_t)n);
+            len += (size_t)n;
+        } else if (n < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+    close(pipefd[0]);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+        ;
+    if (buf == NULL)
+        buf = msh_strdup("");
+    else
+        buf[len] = '\0';
+    *output = buf;
+    return 0;
 }

@@ -35,6 +35,9 @@
 - exit, &, SIGINT/SIGQUIT, 재지향(>, <), 파이프(|)를 추가하여 실제 쉘과 유사한 사용성을 제공한다.
 - 11개 명령을 외부 프로그램 호출 없이 직접 구현하여 파일 시스템과 텍스트 처리 시스템 콜을 익힌다.
 - TCP 원격 쉘 서버/클라이언트를 구현해 네트워크 시스템 프로그래밍을 적용한다.
+- readline 없이 termios raw 모드 라인 에디터를 구현해 한글 입력·히스토리·자동완성·역검색을 지원한다.
+- 재귀 하강 방식의 스크립트 해석기로 if/for/while, 함수, $(...) 명령 치환, 스크립트 파일 실행을 구현한다.
+- x86_64 ptrace로 시스템 호출을 추적하는 trace 명령을 구현한다.
 - 자동화된 기능 테스트, 네트워크 테스트, PTY 시그널 테스트로 안정성을 검증한다.
 - MIT 라이선스로 GitHub에 공개한다.
 
@@ -51,6 +54,9 @@
 | 파서/문법 확장 | &&, \|\|, glob(*, ?, []), explain(파서 시각화) |
 | 편의 기능 | undo/휴지통, serve(HTTP), watch(주기 실행), prompt(확장 프롬프트) |
 | 추가 문법 | >>, 2>, 2>>, 2>&1, &>, &>>, 다단 파이프, 세미콜론(;), 따옴표, 변수 확장 |
+| 라인 편집/히스토리 | termios raw 모드, UTF-8 폭 보정, 방향키/Home/End, Tab 완성, Ctrl-R, ~/.myshell_history |
+| 스크립트 언어 | $(...), if/elif/else/fi, for, while/until, break/continue, 함수, return, 위치 매개변수 |
+| 시스템 호출 추적 | trace -c/-f/-e, x86_64 ptrace, 인자·반환값·호출 요약 |
 | 문서/배포 | README, MIT LICENSE, 결과보고서(HWP/PDF), 자동 테스트 |
 
 
@@ -71,18 +77,20 @@
 
 ## 1.5 결과 요약
 
-최종 프로그램은 총 7,636줄의 C 소스(헤더 포함)로 구성되며, 11개 필수 내장 명령과 9개 보조 내장 명령, TCP 원격 쉘을 제공한다. 기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 4개와 PTY 시그널 테스트를 통과했고, ASan/UBSan 빌드에서도 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.
+최종 프로그램은 직접 작성한 헤더·C 소스 11,414줄(주석·공백 제외 9,712줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 내장 명령과 17개 보조 내장 명령, TCP 원격 쉘, UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기를 제공한다. 기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 5개, 스크립트 테스트 54개, 추적 테스트 32개와 PTY 시그널/라인 에디터 테스트를 통과했고, ASan/UBSan 빌드에서도 새 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.
 
 | 항목 | 결과 |
 |---|---|
-| 소스 규모 | 헤더 포함 7,636줄 (설계 지침 1,000~10,000줄 충족) |
+| 소스 규모 | 직접 작성 11,414줄 + 생성 테이블 393줄, 주석·공백 제외 9,712줄 (지침 충족) |
 | 필수 내장 명령 | ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개) |
-| 보조 내장 명령 | echo, export, unset, jobs, wait, help, true, false, : (9개) |
+| 보조 내장 명령 | echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history (17개) |
 | 기능 테스트 | 94 / 94 통과 |
 | 확장 테스트 | 37 / 37 통과 (explain·&&/\|\|·glob·undo·serve·watch) |
 | 네트워크 테스트 | 25 / 25 통과 (HMAC·watcher·동시 접속·타임아웃·원격 파이프) |
+| 스크립트 테스트 | 54 / 54 통과 (치환·제어문·함수·스크립트 파일·오류) |
+| 추적 테스트 | 32 / 32 통과 (필터·요약·자식 추적·오류) |
 | 계측 테스트 | pipestat 단계별 바이트/시간/종료 코드, SHA-256/HMAC 벡터 |
-| 시그널 테스트 | PTY에서 Ctrl-C/Ctrl-Z 후 쉘 생존 확인 |
+| 터미널 테스트 | PTY에서 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 확인 |
 | 문서/배포 | README, MIT LICENSE, HWP/PDF 보고서, 테스트 스크립트 |
 
 
@@ -153,23 +161,27 @@
 
 | 파일 | 역할 | 줄 수 |
 |---|---|---|
-| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 255 |
-| src/main.c | REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화 | 419 |
-| src/parser.c | 토큰화, 따옴표/변수/틸드 확장, &&/\|\|/glob, 파이프라인/재지향 문법 | 797 |
-| src/execute.c | fork/exec, 파이프, dup2, 전경/백그라운드 대기 | 369 |
+| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 303 |
+| src/main.c | REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화 | 498 |
+| src/parser.c | 토큰화, 따옴표/변수/$(...) 확장, &&/\|\|/glob, 파이프라인/재지향 문법 | 958 |
+| src/execute.c | fork/exec, 파이프, dup2, 전경/백그라운드 대기, 명령 치환 캡처 | 488 |
+| src/script.c | 문장 분리, if/for/while AST, 함수 테이블, 스크립트 실행/완성 판정 | 1593 |
+| src/lineedit.c | termios raw 모드, UTF-8 폭 계산, 히스토리, Tab 완성, Ctrl-R | 909 |
 | src/jobs.c | 백그라운드 job 테이블, 좀비 회수, 종료 시 SIGHUP | 154 |
-| src/builtin.c | 내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/prompt | 559 |
+| src/builtin.c | 내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/test/read/source | 816 |
 | src/cmd_ls.c | ls (-a, -l, -R, -h) | 370 |
 | src/cmd_fs.c | mkdir, rmdir, ln, cp, rm, mv (휴지통 연동) | 952 |
 | src/cmd_text.c | cat, grep (POSIX regex) | 469 |
+| src/cmd_trace.c | ptrace 시스템 호출 추적, 필터/요약/자식 추적 | 573 |
+| src/trace_syscalls.h | x86_64 시스템 호출 이름 테이블 (생성 파일) | 393 |
 | src/cmd_net.c | TCP 원격 쉘 서버/클라이언트, HMAC·watcher·타임아웃 | 1139 |
 | src/cmd_explain.c | 파서 결과 ASCII 시각화 | 111 |
-| src/cmd_trash.c | 휴지통 이동, undo 매니페스트 | 306 |
+| src/cmd_trash.c | 휴지통 이동, undo 매니페스트 | 311 |
 | src/cmd_serve.c | HTTP GET/HEAD 파일 서버 | 544 |
 | src/cmd_watch.c | 주기 실행 | 125 |
 | src/cmd_pipestat.c | 파이프 단계별 바이트·시간·종료 코드 | 330 |
 | src/sha256.c | SHA-256/HMAC | 204 |
-| src/util.c | 메모리/경로/파일 복사·삭제/모드 출력 유틸 | 528 |
+| src/util.c | 메모리/경로/파일 복사·삭제/모드 출력/파일 읽기 유틸 | 567 |
 
 
 ## 2.4 핵심 자료구조
@@ -181,7 +193,11 @@
 | pipeline_t | commands[], ncommands, background, text | 파이프로 연결된 명령 묶음과 백그라운드 여부 |
 | command_list_t | pipelines[], npipelines | 세미콜론/앰퍼샌드로 구분된 명령 목록 |
 | job_t | id, pgid, pids[], done[], running, status, command | 백그라운드 작업의 프로세스 그룹과 완료 상태 |
-| shell_state_t | interactive, last_status, last_bg_pid, jobs[], termios | 쉘 전체 상태($?, $!, 작업 테이블, 터미널 설정) |
+| shell_state_t | interactive, last_status, last_bg_pid, jobs[], history[], functions[], positional[], termios | 쉘 전체 상태($?, $!, 작업/히스토리/함수 테이블, 위치 매개변수, 터미널 설정) |
+| msh_function_t | name, body | 사용자 함수 이름과 본문 텍스트 |
+| snode_t | type, cmd, branches[], body, var, words[], cond, func_body | 스크립트 문장 트리(목록/명령/if/for/while/함수) |
+| tracee_t | pid, entered, nr, args[6], string_arg | ptrace 추적 중인 프로세스의 시스템 호출 진입/종료 상태 |
+| filter_t / summary_t | names[], count / name, count | trace의 -e 필터와 -c 호출 횟수 요약 |
 | net_buf_t | data, len, truncated | 원격 명령의 stdout/stderr 캡처 버퍼 |
 | connector_t | ALWAYS, AND, OR | &&/\|\|로 연결된 파이프라인의 실행 조건 |
 | token_t | text, glob | 단어 토큰과 인용되지 않은 글롭 확장 여부 |
@@ -303,6 +319,81 @@ rm, mv 덮어쓰기, cp -f 덮어쓰기는 대상을 ~/.myshell_trash로 옮기�
 pipestat는 각 파이프 단계의 출력을 relay 프로세스로 통과시켜 바이트 수를 세고, 단계별 시작/종료 시각과 종료 코드를 수집한다. netserv는 연결마다 16바이트 nonce를 보내고 클라이언트가 HMAC-SHA256(token, nonce)를 반환하는 방식으로 인증한다. 토큰은 전송되지 않는다. netcli -w는 서버의 이벤트 로그를 읽어 명령/상태를 읽기 전용으로 보여 준다.
 
 
+### 2.5.8 UTF-8 라인 에디터와 히스토리
+
+readline 같은 외부 라이브러리 없이 termios의 canonical 모드와 ECHO를 끈 raw 모드에서 한 바이트씩 입력을 읽는다. stdin이 TTY일 때만 이 경로를 사용하고, -c·파이프·스크립트 파일처럼 비대화식인 경우에는 기존 getline() 경로를 그대로 유지해 회귀를 막았다.
+
+화면은 각 키 입력마다 현재 줄 전체를 '\r' + ANSI EL(2K)로 지우고 프롬프트와 버퍼를 다시 그린 뒤, 커서 뒤쪽 문자열의 표시 폭만큼 왼쪽으로 이동시킨다. 한글처럼 UTF-8 멀티바이트이면서 표시 폭이 2인 문자는 mbrtowc()와 wcwidth()로 폭을 계산하므로, 커서 이동·중간 삽입·백스페이스가 화면과 어긋나지 않는다. 편집 버퍼는 UTF-8 문자 경계를 기준으로 이전/다음 문자를 찾아 삭제·이동한다.
+
+| 입력 | 동작 |
+|---|---|
+| ← / → | UTF-8 문자 단위 커서 이동 |
+| Home / End, Ctrl-A / Ctrl-E | 줄 처음/끝으로 이동 |
+| Backspace / Delete | 커서 앞/뒤 문자 삭제 (한글 문자 단위) |
+| Ctrl-U / Ctrl-K / Ctrl-W | 커서 앞 전체 / 뒤 전체 / 이전 단어 삭제 |
+| ↑ / ↓ | 히스토리 탐색, 마지막 편집 내용 보존 |
+| Tab | 내장 명령·PATH 실행 파일·파일/디렉터리 이름 완성 |
+| Ctrl-R | 히스토리 역검색, Enter로 선택, Esc/Ctrl-C로 취소 |
+
+히스토리는 ~/.myshell_history에 한 줄씩 append하고, 쉘 시작 시 읽어 최대 1,000개를 유지한다. history [-c]는 목록을 출력하거나 파일과 메모리를 비운다. !!는 마지막 명령, !N은 N번 명령, !-N은 N번째 전 명령으로 확장하며, 확장된 실제 명령을 히스토리에 저장해 !!를 반복해도 같은 명령이 재실행된다.
+
+```text
+/* lineedit.c: UTF-8 표시 폭과 커서 재배치 (요약) */
+tail = display_width(buf + cursor, len - cursor);
+printf("\r\033[2K%s", prompt);
+fwrite(buf, 1, len, stdout);
+if (tail > 0)
+    printf("\033[%zuD", tail);   /* 커서를 논리 위치로 되돌림 */
+```
+
+
+### 2.5.9 스크립트 해석기
+
+기존 parser.c는 한 줄을 평면적인 pipeline 목록으로 바꾸므로 중첩된 if/for/while과 함수 본문을 표현할 수 없다. script.c는 소스를 따옴표·$(...)·주석을 고려해 문장(statement)으로 나눈 뒤, 재귀 하강 방식으로 snode_t 트리를 만든다. 트리의 명령 노드는 원문 텍스트를 보관했다가 실행 시점에 기존 parse_line()/execute_command_list()에 넘기므로, 파이프·재지향·glob·&&/||·백그라운드가 스크립트 안에서도 그대로 동작한다.
+
+제어 흐름은 break/continue/return을 작은 정수 코드로 반환해 상위 노드로 전파한다. for는 단어 목록을 확장·분할해 변수를 setenv()로 설정하고, while/until은 조건 명령의 종료 상태를 확인한다. 함수 정의는 이름과 본문 텍스트를 shell_state_t의 함수 테이블에 저장하고, 호출 시 위치 매개변수 배열을 잠시 교체했다가 복원한다. 따라서 $1, $2, $#, $@, shift가 함수와 스크립트 파일 양쪽에서 동작한다.
+
+```text
+script   := statement*
+statement:= if | for | while | until | function | command
+if       := 'if' command ';' 'then' statement* ('elif' command ';' 'then'
+            statement*)* ('else' statement*)? 'fi'
+for      := 'for' NAME ('in' word*)? ';' 'do' statement* 'done'
+while    := 'while' command ';' 'do' statement* 'done'
+function := NAME '(' ')' '{' statement* '}'
+```
+
+$(...)는 parser.c의 expand_dollar()에서 닫는 괄호를 균형 있게 찾고, 자식 프로세스에서 pipe()로 stdout을 캡처해 실행한다. 출력의 개행은 공백으로 바꾸고 끝의 개행은 제거하며, 중첩 치환과 큰따옴표 안의 치환도 지원한다. 대화형 입력에서는 if/for/함수/따옴표가 닫히지 않았는지 script_source_is_complete()로 판정해 '... ' 프롬프트로 계속 입력을 받는다.
+
+
+### 2.5.10 ptrace 시스템 호출 추적기
+
+trace는 자식에서 PTRACE_TRACEME 후 SIGSTOP으로 멈추고, 부모가 PTRACE_SETOPTIONS로 TRACESYSGOOD과 fork/vfork/clone 이벤트를 켠 뒤 PTRACE_SYSCALL로 재개한다. waitpid(__WALL)가 SIGTRAP|0x80 정지 신호를 보고하면 PTRACE_GETREGS로 레지스터를 읽어 시스템 호출 번호, 6개 인자, 반환값을 얻는다. 시스템 호출 이름은 unistd_64.h에서 생성한 테이블을 사용하고, 경로 인자는 PTRACE_PEEKDATA로 자식 메모리를 읽어 문자열로 보여 준다.
+
+| 옵션 | 동작 |
+|---|---|
+| (기본) | 시스템 호출별 이름·인자·반환값을 한 줄씩 출력 |
+| -e NAME[,NAME...] | 지정한 시스템 호출만 출력 (trace= 접두사 허용) |
+| -c | 호출 횟수와 비율을 많은 순서로 요약 |
+| -f | fork/vfork/clone 자식과 스레드를 자동 추적, PID prefix 출력 |
+
+```text
+/* cmd_trace.c: 시스템 호출 진입/종료 처리 (요약) */
+if (sig == (SIGTRAP | 0x80)) {
+    ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+    if (!t->entered) {
+        t->entered = 1;
+        t->nr = regs.orig_rax;
+        t->args[0] = regs.rdi; ... t->args[5] = regs.r9;
+    } else {
+        t->entered = 0;
+        print_syscall(pid, follow, t->nr, t->args, t->string_arg, regs.rax, 1);
+    }
+    ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+}
+```
+
+
 ## 2.6 설계 구성 요소와의 대응
 
 | 설계 구성 요소 | 본 프로젝트에서의 수행 내용 |
@@ -310,7 +401,7 @@ pipestat는 각 파이프 단계의 출력을 relay 프로세스로 통과시켜
 | 목표/기준 설정 | 교재 357쪽 simplesh.c를 기준으로 5개 필수 요구사항과 11개 내장 명령, 원격 쉘 확장을 목표로 설정 |
 | 분석 | 요구사항을 R1~R6으로 분해하고, 프로세스/시그널/파일 시스템/텍스트/네트워크로 나누어 분석 |
 | 제작 | parser, executor, job manager, builtin, cmd_* 모듈로 구현. Makefile로 재현 가능한 빌드 제공 |
-| 시험 | 94개 기능 + 37개 확장 + 25개 네트워크 + 4개 파일 입력 테스트 + PTY 시그널 테스트 |
+| 시험 | 94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 54개 스크립트 + 32개 추적 테스트 + PTY 시그널/라인 에디터 테스트 |
 
 
 ---
@@ -320,9 +411,9 @@ pipestat는 각 파이프 단계의 출력을 relay 프로세스로 통과시켜
 
 | 제한 요소 | 설계 기준 | 본 프로젝트의 대응 |
 |---|---|---|
-| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 헤더 포함 7,636줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
-| 안정성 | 외부 환경 변화에도 지속적으로 동작 | 오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 94개 자동 테스트, ASan/UBSan 검증 |
-| 생산성 | 모든 기능이 동작하고 응용 가능 | 11개 필수 명령 + 9개 보조 명령, 다단 파이프/재지향, 옵션 지원, README/보고서 제공 |
+| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 직접 작성 11,414줄(주석·공백 제외 9,712줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
+| 안정성 | 외부 환경 변화에도 지속적으로 동작 | 오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 247개 자동 테스트, ASan/UBSan 검증 |
+| 생산성 | 모든 기능이 동작하고 응용 가능 | 11개 필수 명령 + 17개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace, README/보고서 제공 |
 | 윤리성/사회적 영향 | 안전하고 책임 있는 소프트웨어 | rm의 /, ., .. 보호, system()/popen() 미사용, MIT 라이선스로 투명한 재사용 허용 |
 | 표준성 | POSIX/Linux 표준 인터페이스 사용 | fork, execvp, waitpid, pipe, dup2, signal/sigaction, termios, dirent, regex 사용 |
 | 이식성 | 리눅스/WSL에서 빌드 및 실행 | Ubuntu 26.04 WSL2와 gcc 15.2에서 검증. GNU 확장은 _GNU_SOURCE로 명시 |
@@ -330,17 +421,17 @@ pipestat는 각 파이프 단계의 출력을 relay 프로세스로 통과시켜
 
 ## 3.1 경제성
 
-전체 소스는 7,636줄로 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
+전체 소스는 직접 작성분 11,414줄(주석·공백 제외 9,712줄)과 생성 테이블 393줄로 구성되어 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
 
 
 ## 3.2 안정성
 
-모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 94개 기능 테스트와 37개 확장 테스트를 통과했다.
+모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 기능·스크립트·추적·라인 에디터 테스트를 통과했다.
 
 
 ## 3.3 생산성
 
-ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. netserv/netcli로 원격 명령 실행도 가능하며, 테스트는 make test로 재현한다.
+ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. 라인 에디터와 스크립트, trace까지 같은 바이너리에 포함되어 별도 도구 없이 시스템 프로그래밍 실습을 할 수 있으며, 테스트는 make test로 재현한다.
 
 
 ## 3.4 윤리성과 사회적 영향
@@ -365,10 +456,10 @@ POSIX/Linux 시스템 콜과 C 표준 라이브러리를 사용했으며, 특정
 
 | 단계 | 교재 simplesh.c | myshell 확장 |
 |---|---|---|
-| 입력 | fgets(buf, 256, stdin) | getline()으로 길이 제한 없이 읽고, ;/&를 실행 시점에 분리 |
-| 인자 분리 | getargs()가 공백만 처리 | 따옴표, 이스케이프, $VAR, $?, $$, $!, ~ 확장 |
-| 실행 | 무조건 fork + execvp | 내장 명령 분기, 파이프/재지향, 다중 명령 |
-| 대기 | wait((int *)0) | waitpid()로 개별 수집, 백그라운드 job 회수, 종료 상태 저장 |
+| 입력 | fgets(buf, 256, stdin) | TTY면 raw 모드 라인 에디터, 아니면 getline()으로 길이 제한 없이 읽고 ;/&를 실행 시점에 분리 |
+| 인자 분리 | getargs()가 공백만 처리 | 따옴표, 이스케이프, $VAR, $?, $$, $!, ~, $(...), 위치 매개변수 확장 |
+| 실행 | 무조건 fork + execvp | 내장 명령/함수 분기, 파이프/재지향, if/for/while, 다중 명령, trace |
+| 대기 | wait((int *)0) | waitpid()로 개별 수집, 백그라운드 job 회수, ptrace 자식 추적, 종료 상태 저장 |
 | 시그널 | 없음 | SIGINT/SIGQUIT 핸들러, 자식 신호 복원, 전경 프로세스 그룹 |
 
 
@@ -376,7 +467,7 @@ POSIX/Linux 시스템 콜과 C 표준 라이브러리를 사용했으며, 특정
 
 토크나이저는 연산자(&>>, &>, 2>>, 2>, >>, >, <, |, ;, &)를 단어보다 먼저 인식한다. 단어는 작은따옴표(문자 그대로), 큰따옴표($ 확장 허용), 백슬래시 이스케이프를 지원하며, 빈 따옴표("")도 하나의 빈 인자로 보존한다. 변수 확장은 getenv()를 사용하고, 정의되지 않은 변수는 빈 문자열로 확장한다. $?는 직전 명령의 종료 상태, $$는 쉘 PID, $!는 마지막 백그라운드 프로세스 그룹 ID를 나타낸다.
 
-명령 목록을 실행 시점에 분리하는 설계는 단순히 $?뿐 아니라 “export X=hello; echo $X”와 같은 한 줄 명령에서도 올바른 값을 보장한다. 만약 전체 줄을 한 번에 확장하면 두 번째 명령의 $X가 이전 값을 보게 되므로, 이 분리는 쉘 의미론상 중요한 선택이었다.
+명령 목록을 실행 시점에 분리하는 설계는 단순히 $?뿐 아니라 “export X=hello; echo $X”와 같은 한 줄 명령에서도 올바른 값을 보장한다. 만약 전체 줄을 한 번에 확장하면 두 번째 명령의 $X가 이전 값을 보게 되므로, 이 분리는 쉘 의미론상 중요한 선택이었다. $(...)는 닫는 괄호를 균형 있게 찾아 자식 프로세스에서 실행하고 stdout을 캡처하며, $1~$9/$#/$@는 shell_state_t의 위치 매개변수 배열에서 읽는다.
 
 
 ## 4.3 실행기와 프로세스 제어
@@ -409,10 +500,12 @@ POSIX/Linux 시스템 콜과 C 표준 라이브러리를 사용했으며, 특정
 | cat | getline, 줄 번호/탭/줄 끝 표시 | -n, -b, -E, -T |
 | grep | regcomp/regexec, 재귀 탐색, 파일명/줄 번호 prefix | -i, -v, -n, -c, -l, -r, -E, -F, -q |
 
+이 밖에 스크립트 지원을 위해 test/[(-e, -f, -d, -z, -n, 문자열/수 비교), read [-r], shift, source/., history를 내장 명령으로 추가했다. test/[는 시스템 콜과 문자열 비교만으로 구현했고, read는 fgets()로 한 줄을 읽어 여러 변수에 나눠 저장하며, source는 파일을 읽어 현재 쉘 상태에서 script_execute()를 호출한다.
+
 
 ## 4.6 테스트 설계와 자동화
 
-tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교한다. tests/test_net.sh는 인증, 원격 파이프/재지향, 동시 접속, 타임아웃을 25개 항목으로 확인하고, tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 4개 항목으로 검사한다. tests/test_signals.py는 pty.fork()로 가상 터미널을 열고 Ctrl-C/Ctrl-Z 후 쉘 생존을 확인한다. 전체는 make test로 실행한다.
+tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교한다. tests/test_ext.sh는 37개 확장 기능을, tests/test_net.sh는 인증·원격 파이프/재지향·동시 접속·타임아웃을 25개 항목으로 확인한다. tests/test_script.sh는 명령 치환·제어문·함수·스크립트 파일·오류 처리를 54개 항목으로, tests/test_trace.sh는 ptrace 필터·요약·자식 추적을 32개 항목으로 검사한다. tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 5개 항목으로 확인한다. tests/test_signals.py와 tests/test_lineedit.py는 pty.fork()로 가상 터미널을 열어 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 지속성을 확인한다. 전체는 make test로 실행한다.
 
 
 ## 4.7 협업과 형상 관리
@@ -449,6 +542,10 @@ netserv는 getaddrinfo/socket/bind/listen/accept로 서버를 열고, 접속마�
 | serve | cmd_serve.c | GET/HEAD, 디렉터리 목록, realpath 기반 경로 탈출 차단 |
 | watch | cmd_watch.c | shell_execute_line()을 주기적으로 호출 |
 | prompt | main.c, builtin.c | 종료 코드·소요 시간·실행 중 작업 수 표시 |
+| 라인 에디터 | lineedit.c | raw 모드, UTF-8 폭 계산, Tab 완성, Ctrl-R, 히스토리 파일 |
+| 스크립트 | script.c | 문장 분리 → snode_t 트리 → 제어 흐름/함수/위치 매개변수 실행 |
+| $(...) | parser.c, execute.c | 균형 괄호 탐색, fork/pipe로 stdout 캡처, 중첩 치환 |
+| trace | cmd_trace.c, trace_syscalls.h | PTRACE_SYSCALL 진입/종료, -e 필터, -c 요약, -f 자식 추적 |
 | pipestat | cmd_pipestat.c | relay 프로세스로 단계별 바이트/시간/종료 코드 수집 |
 | HMAC 인증 | cmd_net.c, sha256.c | nonce + HMAC-SHA256 챌린지-응답 |
 | netcli -w | cmd_net.c | 이벤트 로그를 tail해 원격 실행을 읽기 전용 관전 |
@@ -488,6 +585,12 @@ netserv는 getaddrinfo/socket/bind/listen/accept로 서버를 열고, 접속마�
 | serve | 완료 | GET/HEAD, 디렉터리 목록, ../ 차단 |
 | watch / prompt | 완료 | 주기 실행, 확장 프롬프트 |
 | pipestat | 완료 | 단계별 바이트/시간/종료 코드 출력 |
+| 라인 에디터 | 완료 | 한글 편집, 방향키/Home/End, Backspace/Delete, Tab, Ctrl-R |
+| 히스토리 | 완료 | ~/.myshell_history 지속, history/-c, !!/!N, 역검색 |
+| 스크립트 제어문 | 완료 | if/elif/else, for, while/until, break/continue, 중첩 |
+| 함수/위치 매개변수 | 완료 | $1~$9, $#, $@, shift, return, source, 스크립트 인자 |
+| $(...) | 완료 | 중첩 치환, 따옴표 안 치환, 대입문 확장 |
+| trace | 완료 | 시스템 호출 이름·인자·반환값, -e 필터, -c 요약, -f 자식 추적 |
 | HMAC 인증 | 완료 | nonce 기반 챌린지-응답, 토큰 미전송 |
 | netcli -w | 완료 | 원격 명령/상태 읽기 전용 관전 |
 
@@ -520,7 +623,7 @@ shell> exit
 
 ## 5.2 프로젝트 완성도 평가
 
-기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 4개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.
+기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 스크립트 테스트 54개, 추적 테스트 32개, 파일 입력 테스트 5개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/라인 에디터 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED; LINE EDITOR TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·라인 에디터 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.
 
 | 제외 기능 | 이유 | 영향 |
 |---|---|---|
@@ -529,7 +632,9 @@ shell> exit
 | serve 인증 | HTTP 서버는 별도 인증 없음. 기본 127.0.0.1 바인딩 | 외부 공개 시 주의 |
 | 원격 cd | 원격 명령을 명령마다 자식 프로세스에서 실행 | cd가 다음 원격 명령에 유지되지 않음 |
 | fg, bg | SIGTSTP 일시정지 모델을 사용하지 않음 | 중단된 작업 재개 불가 |
-| 명령 치환 $(...) | 필수 범위 아님 | 명령 결과를 인자로 사용 불가 |
+| 산술 확장 $((...)) | 스크립트 필수 범위가 아님 | 수치 계산은 test/외부 명령 사용 |
+| break/continue 단계 | 한 단계만 지원 | 중첩 루프에서 break 2 불가 |
+| 루프/if 파이프 | done \| cmd, fi \| cmd 미지원 | 루프 결과를 파이프로 직접 전달 불가 |
 
 
 ## 5.3 일정 계획 평가
@@ -540,7 +645,7 @@ shell> exit
 | 12주 | 파서/실행기 구현 | 따옴표·변수 확장, 파이프·재지향, 내장 명령 디스패치 | 계획대로 |
 | 13주 | 시그널/작업 제어 | 프로세스 그룹, tcsetpgrp, VQUIT 매핑, jobs/wait | 계획대로 |
 | 14주 | 11개 명령 구현 및 통합 | 파일/텍스트 명령, 94개 기능 테스트, ASan 검증 | 테스트 보강으로 일부 지연 |
-| 15주 | 확장 기능, 보고서/GitHub 정리 | netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 68개 추가 테스트 | 15주 내 완료 |
+| 15주 | 확장 기능, 보고서/GitHub 정리 | netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, 150여 개 추가 테스트 | 15주 내 완료 |
 
 14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 보강했고, 15주차에 원격 쉘 확장과 네트워크 테스트를 추가했다.
 
@@ -549,10 +654,10 @@ shell> exit
 
 | 팀원 | 학번 | GitHub | 담당 업무 | 기여도 |
 |---|---|---|---|---|
-| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir | 50% |
-| 강동우 | 20223080 | pizza0420 | netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 확장/기능 테스트, 문서 | 50% |
+| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir | 50% |
+| 강동우 | 20223080 | pizza0420 | netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/PTY 테스트, 문서 | 50% |
 
-류동엽은 쉘 코어와 netserv, 강동우는 파일/텍스트 명령과 netcli·테스트를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.
+류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·netserv, 강동우는 파일/텍스트 명령과 netcli·테스트·문서를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.
 
 
 ## 5.5 위험 처리
@@ -572,6 +677,9 @@ shell> exit
 | 휴지통 증가 | 홈 디렉터리 사용량 증가 | 필요 시 ~/.myshell_trash 수동 정리, rm --no-trash 제공 | 테스트에서 동작 확인 |
 | HMAC nonce 재사용 | 재전송 공격 가능 | 연결마다 새 nonce, 연결 종료 시 폐기 | 핸드셰이크 테스트 |
 | watcher 로그 노출 | 원격 명령 내용 노출 | 기본 loopback, 이벤트 로그는 /tmp 0600 | 권한/접속 테스트 |
+| 한글 커서 어긋남 | UTF-8 편집 위치 오류 | mbrtowc/wcwidth 기반 표시 폭 계산 | PTY 한글 입력/이동 테스트 |
+| 스크립트 파서 회귀 | 기존 명령 실행 오류 | 명령 노드는 기존 parse_line/execute에 위임, 94개 회귀 테스트 유지 | 전체 테스트 통과 |
+| ptrace 차단 | trace 실행 불가 | PTRACE_TRACEME로 자기 자식만 추적, 실패 시 오류 메시지 | WSL2 추적 테스트 통과 |
 
 
 ## 5.6 GitHub 저장소와 라이선스
@@ -615,14 +723,23 @@ make
 # 한 줄 실행
 ./myshell -c 'echo hello > out.txt; cat out.txt | grep hello'
 
+# 스크립트 실행
+./myshell demo.sh alice bob
+./myshell -c 'for i in 1 2 3; do echo $i; done'
+
+# 시스템 호출 추적
+./myshell -c 'trace -e write /bin/echo hi'
+./myshell -c 'trace -c -e openat /bin/cat /etc/hostname'
+
 # 원격 쉘: 서버를 백그라운드로 실행하고 클라이언트로 명령 실행
 ./myshell -c 'netserv -1 -p 9090 & sleep 0.3; netcli -p 9090 127.0.0.1 echo hello; wait'
 
 # 전체 테스트
 make test
 
-# 시그널 테스트 (Linux/WSL)
+# 시그널/라인 에디터 테스트 (Linux/WSL)
 python3 tests/test_signals.py
+python3 tests/test_lineedit.py
 ```
 
 
@@ -651,10 +768,13 @@ python3 tests/test_signals.py
 | 추가 테스트 | 내용 | 개수 |
 |---|---|---|
 | 네트워크 | HMAC 인증, 원격 파이프/재지향, 동시 접속, 타임아웃, watcher | 25 |
-| 파일 입력 | 여러 줄 스크립트, 마지막 줄 중복, 백그라운드 혼합 | 4 |
+| 파일 입력 | 여러 줄 스크립트, 마지막 줄 중복, 백그라운드 혼합, 표준입력 루프 | 5 |
 | 보안 | SHA-256/HMAC 표준 벡터 | 2 |
 | 확장 | explain, &&/\|\|, glob, undo/휴지통, pipestat, serve, watch | 37 |
+| 스크립트 | 치환, if/elif/else, for, while/until, break/continue, 함수, source, 재지향, 오류 | 54 |
+| 추적 | 시스템 호출 필터/요약/자식 추적/경로 문자열/오류 | 32 |
 | 시그널 | PTY에서 Ctrl-C/Ctrl-Z 및 확장 프롬프트 | 6 |
+| 라인 에디터 | 한글 입력, 커서 이동, Tab, Ctrl-R, 히스토리 지속 | 1 시나리오 |
 
 make test는 위 테스트를 모두 실행한다.
 
@@ -663,15 +783,19 @@ make test는 위 테스트를 모두 실행한다.
 
 | 파일 | 줄 수 | 비고 |
 |---|---|---|
-| include/myshell.h | 255 | 공용 선언 |
-| src/main.c | 419 | REPL/시그널/터미널 |
-| src/parser.c | 797 | 토큰화/확장/문법 |
-| src/execute.c | 369 | fork/pipe/redirection/wait |
+| include/myshell.h | 303 | 공용 선언 |
+| src/main.c | 498 | REPL/시그널/터미널 |
+| src/parser.c | 958 | 토큰화/확장/문법 |
+| src/execute.c | 488 | fork/pipe/redirection/wait |
+| src/script.c | 1593 | 스크립트 제어문/함수 |
+| src/lineedit.c | 909 | 라인 에디터/히스토리 |
 | src/jobs.c | 154 | 백그라운드 작업 |
-| src/builtin.c | 559 | 내장 명령 |
+| src/builtin.c | 816 | 내장 명령 |
 | src/cmd_ls.c | 370 | ls |
 | src/cmd_fs.c | 952 | mkdir/rmdir/ln/cp/rm/mv |
 | src/cmd_text.c | 469 | cat/grep |
+| src/cmd_trace.c | 573 | ptrace 추적 |
+| src/trace_syscalls.h | 393 | 시스템 호출 이름 테이블 |
 | src/cmd_net.c | 1139 | netserv/netcli/HMAC |
 | src/cmd_explain.c | 111 | explain |
 | src/cmd_trash.c | 311 | undo/trash |
@@ -679,8 +803,8 @@ make test는 위 테스트를 모두 실행한다.
 | src/cmd_watch.c | 125 | watch |
 | src/cmd_pipestat.c | 330 | pipestat |
 | src/sha256.c | 204 | SHA-256/HMAC |
-| src/util.c | 528 | 공통 유틸 |
-| 합계 | 7,636 | 헤더 포함 |
+| src/util.c | 567 | 공통 유틸 |
+| 합계 | 11,807 | 직접 작성 11,414 + 생성 테이블 393. 주석·공백 제외 코드 9,712줄 |
 
 
 # 부록 D. 참고문헌
@@ -690,4 +814,6 @@ make test는 위 테스트를 모두 실행한다.
 - Linux man pages: opendir(3), readdir(3), lstat(2), link(2), symlink(2), readlink(2), rename(2), unlink(2), rmdir(2)
 - POSIX regex: regcomp(3), regexec(3), regerror(3)
 - Linux man pages: socket(2), bind(2), listen(2), accept(2), connect(2), getaddrinfo(3), poll(2)
+- Linux man pages: ptrace(2), waitpid(2) __WALL, sys/user.h, asm/unistd_64.h
+- Linux man pages: termios(3), wcwidth(3), mbrtowc(3)
 - 프로젝트 저장소: https://github.com/gong000000/lab3

@@ -526,3 +526,42 @@ void msh_format_size(long long size, char *out, size_t out_size)
     else
         snprintf(out, out_size, "%.1f%c", value, units[unit]);
 }
+
+/* Read a whole text file into a NUL-terminated buffer.  Returns NULL on
+ * failure and sets errno. */
+char *msh_read_file(const char *path)
+{
+    FILE *fp;
+    char *buf = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+
+    fp = fopen(path, "r");
+    if (fp == NULL)
+        return NULL;
+
+    for (;;) {
+        size_t n;
+
+        if (len + 4096 + 1 > cap) {
+            cap = cap ? cap * 2 : 8192;
+            buf = msh_realloc(buf, cap);
+        }
+        n = fread(buf + len, 1, 4096, fp);
+        len += n;
+        if (n < 4096) {
+            if (ferror(fp)) {
+                free(buf);
+                fclose(fp);
+                errno = EIO;
+                return NULL;
+            }
+            break;
+        }
+    }
+    fclose(fp);
+    if (buf == NULL)
+        buf = msh_strdup("");
+    buf[len] = '\0';
+    return buf;
+}

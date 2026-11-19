@@ -1,7 +1,9 @@
 # myshell - Lab 3 팀 프로젝트
 
 교재 357페이지의 `simplesh.c`를 확장한 POSIX 쉘입니다. Lab 3의 5개 요구사항과
-11개 내장 명령을 구현했고, TCP 기반 원격 쉘(`netserv`, `netcli`)을 추가했습니다.
+11개 내장 명령을 구현했고, TCP 기반 원격 쉘(`netserv`, `netcli`), UTF-8 라인
+에디터, 쉘 스크립트(`if`/`for`/`while`/함수/`$(...)`), ptrace 기반 `trace`를
+추가했습니다.
 
 - 저장소: <https://github.com/gong000000/lab3>
 - 라이선스: MIT
@@ -15,10 +17,10 @@
 | 시그널 | `SIGINT`(Ctrl-C), `SIGQUIT`(Ctrl-Z), 전경 작업만 종료 |
 | 재지향/파이프 | `<`, `>`, `>>`, `2>`, `2>>`, `2>&1`, `&>`, `&>>`, 다단 `\|` |
 | 내장 명령 | `ls`, `pwd`, `cd`, `mkdir`, `rmdir`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep` |
-| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:` |
+| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[`, `read`, `shift`, `source`, `.`, `trace`, `history` |
 | 네트워크 확장 | `netserv`(TCP 서버), `netcli`(클라이언트), HMAC 챌린지-응답 인증, 동시 접속, 타임아웃 |
 | 원격 관전 | `netcli -w`로 서버에서 실행되는 명령/상태를 읽기 전용으로 확인 |
-| 파이프 계측 | `pipestat 'cmd1 | cmd2'`로 단계별 바이트·시간·종료 코드 출력 |
+| 파이프 계측 | `pipestat 'cmd1 \| cmd2'`로 단계별 바이트·시간·종료 코드 출력 |
 | 조건부 실행 | `&&`, `||` |
 | glob | `*`, `?`, `[...]` (인용되지 않은 경우) |
 | 파서 시각화 | `explain '명령줄'` |
@@ -26,6 +28,14 @@
 | HTTP 서버 | `serve -p 8080 -d DIR` |
 | 주기 실행 | `watch -n 2 -c 3 '명령'` |
 | 프롬프트 확장 | `prompt on/off` (종료 코드·실행 시간·작업 수) |
+| 라인 에디터 | 방향키, Home/End, Backspace/Delete, Ctrl-U/K/W, UTF-8/한글 폭 보정 |
+| 히스토리 | `~/.myshell_history`, `history [-c]`, `!!`, `!N`, `!-N`, Ctrl-R 역검색 |
+| 자동 완성 | Tab으로 내장 명령·`PATH` 실행 파일·파일/디렉터리 완성 |
+| 명령 치환 | `$(...)`, 중첩 치환, 따옴표 안 치환 |
+| 스크립트 | `if/elif/else/fi`, `for`, `while`/`until`, `break`, `continue`, 함수, `return` |
+| 위치 매개변수 | `$0`~`$9`, `$#`, `$@`, `$*`, `${...}`, `shift` |
+| 스크립트 실행 | `myshell SCRIPT [ARGS...]`, `source FILE [ARGS...]`, `.` |
+| 시스템 호출 추적 | `trace [-c] [-f] [-e NAME,...] COMMAND` (x86_64 ptrace, 인자·반환값) |
 
 Ctrl-Z는 과제 명세에 맞춰 `SIGQUIT`에 매핑했습니다. 일반 리눅스의 `SIGTSTP`와
 다르며, 쉘 종료 시 터미널 설정을 복구합니다.
@@ -89,6 +99,13 @@ shell> exit
 ```bash
 ./myshell -c 'exit 7'
 echo $?
+```
+
+스크립트 파일과 인자를 넘길 수도 있습니다.
+
+```bash
+./myshell demo.sh alice bob
+./myshell -c 'for i in 1 2 3; do echo $i; done'
 ```
 
 ### 2.4 시연 준비
@@ -424,7 +441,99 @@ shell> cat watch.log
 [22:00:58] status=0 cmd=echo watched-command
 ```
 
-#### (10) 테스트 실행
+#### (10) 라인 에디터와 히스토리
+
+```text
+shell> echo 한글
+한글
+shell> ech<Tab>
+shell> echo 자동완성
+자동완성
+shell> pwd
+/home/gong0000/lab3
+shell> <↑>
+shell> pwd
+shell> <Ctrl-R>
+(reverse-i-search)`pwd': pwd
+shell> history
+    1  echo 한글
+    2  echo 자동완성
+    3  pwd
+```
+
+- 입력 중 왼쪽/오른쪽 키로 커서를 옮기고 Home/End, Backspace/Delete를 쓸 수 있습니다.
+- 한글처럼 폭이 2인 문자도 커서 위치와 화면 폭을 맞춰 다시 그립니다.
+- 히스토리는 `~/.myshell_history`에 저장되어 다음 실행에서도 유지됩니다.
+- `!!`는 마지막 명령, `!3`은 3번 명령, `!-2`는 두 번째 전 명령을 실행합니다.
+
+#### (11) 쉘 스크립트
+
+```text
+shell> for i in 1 2 3; do echo "i=$i"; done
+i=1
+i=2
+i=3
+shell> if [ -f README.md ]; then echo file; else echo missing; fi
+file
+shell> greet() { echo "hello $1 ($# args)"; }; greet myshell
+hello myshell (1 args)
+shell> echo "pwd=$(pwd)"
+pwd=/home/gong0000/lab3
+shell> i=; while [ "$i" != "aaa" ]; do i="${i}a"; echo "$i"; done
+a
+aa
+aaa
+```
+
+스크립트 파일과 위치 매개변수도 지원합니다.
+
+```bash
+cat > demo.sh <<'EOS'
+for name in "$1" "$2"; do
+    echo "hello $name"
+done
+echo "count=$#"
+EOS
+./myshell demo.sh alice bob
+```
+
+```text
+hello alice
+hello bob
+count=2
+```
+
+`while read line; do ...; done < file`처럼 루프 전체에 재지향을 붙일 수도
+있습니다. `break`, `continue`, `return`, `source`/`.`도 사용할 수 있습니다.
+
+#### (12) 시스템 호출 추적
+
+```text
+shell> trace -e write /bin/echo hi
+hi
+write(1, 0x5f80b6288270, 2) = 2
+shell> trace -e openat /bin/cat /etc/hostname
+openat(-100, "/etc/ld.so.cache", 524288, 0) = 3
+openat(-100, "/etc/hostname", 524288, 0) = 3
+...
+shell> trace -c -e write /bin/echo hi
+hi
+write(1, 0x..., 2) = 2
+
+   calls  syscall
+       1  write                    100.0%
+       1  total
+shell> trace -f -e write /bin/sh -c 'echo child'
+child
+[  1234] write(1, 0x..., 6) = 6
+```
+
+- `-e NAME[,NAME...]` 또는 `-e trace=NAME`으로 시스템 호출을 고릅니다.
+- `-c`는 호출 횟수 요약, `-f`는 `fork`/`vfork`/`clone` 자식까지 추적합니다.
+- 경로 인자는 자식 프로세스 메모리에서 읽어 문자열로 보여 줍니다.
+- x86_64 Linux/WSL2에서 동작하며, `ptrace`가 허용된 환경이어야 합니다.
+
+#### (13) 테스트 실행
 
 ```bash
 make test
@@ -436,28 +545,37 @@ make test
 Passed: 94
 Failed: 0
 ...
-Network tests passed: 23
+Network tests passed: 25
 Network tests failed: 0
 ...
-File-input tests passed: 4
+File-input tests passed: 5
 File-input tests failed: 0
 ...
 Extension tests passed: 37
 Extension tests failed: 0
 ...
+Script tests passed: 54
+...
+Trace tests passed: 32
+...
 SHA-256/HMAC tests passed
 ...
 SIGNAL TEST PASSED
+...
+LINE EDITOR TEST PASSED
 ```
 
 테스트 스크립트:
 
 - `tests/run_tests.sh`: 94개 기능 테스트
 - `tests/test_net.sh`: 25개 네트워크 테스트
-- `tests/test_file_input.sh`: 4개 파일 입력 테스트
+- `tests/test_file_input.sh`: 5개 파일 입력 테스트
 - `tests/test_ext.sh`: 37개 확장 테스트
+- `tests/test_script.sh`: 54개 스크립트 테스트
+- `tests/test_trace.sh`: 32개 ptrace 추적 테스트
 - `tests/test_sha256.c`: SHA-256/HMAC 벡터 테스트
 - `tests/test_signals.py`: PTY 시그널/프롬프트 테스트
+- `tests/test_lineedit.py`: PTY 라인 에디터/히스토리/한글 테스트
 
 ### 2.6 스크린샷 체크리스트
 
@@ -483,6 +601,10 @@ SIGNAL TEST PASSED
 | `18_watch_prompt.png` | watch와 확장 프롬프트 | `watch -n 1 -c 2 echo hi`, `prompt on` |
 | `19_pipestat.png` | 파이프 계측 | `pipestat 'echo hi \| cat \| wc -c'` |
 | `20_net_watch.png` | 원격 관전 | `netcli -w -t 2 -p 9095 127.0.0.1` |
+| `21_lineedit.png` | 한글 편집, Tab, 히스토리 | `echo 한글`, `ech<Tab>`, ↑, Ctrl-R `pwd`, `history` |
+| `22_script.png` | 스크립트 제어문/함수 | `for i in 1 2 3; do echo $i; done`, `greet() { ...; }` |
+| `23_script_file.png` | 스크립트 파일/위치 매개변수 | `./myshell demo.sh alice bob` |
+| `24_trace.png` | ptrace 추적/요약 | `trace -e write /bin/echo hi`, `trace -c -e openat /bin/cat /etc/hostname` |
 
 캡처 팁:
 
@@ -502,6 +624,7 @@ SIGNAL TEST PASSED
 | `netcli: cannot connect` | 서버가 실행 중인지, 포트 번호가 같은지 확인 |
 | Ctrl-Z가 동작하지 않음 | 실제 WSL 터미널에서 실행 중인지 확인하고 `ulimit -c 0` 설정 |
 | `make test`가 중간에 멈춤 | 이전에 띄운 `netserv`가 포트를 잡고 있는지 확인 |
+| `trace: ptrace ...` 오류 | WSL2/Linux의 `ptrace` 권한을 확인하고 `sudo sysctl kernel.yama.ptrace_scope=0` 시도 |
 
 ## 3. 프로젝트 구조
 
@@ -514,13 +637,17 @@ SIGNAL TEST PASSED
 │   └── myshell.h          공용 구조체와 함수 선언
 ├── src/
 │   ├── main.c             REPL, 명령 목록 분리, 시그널, 터미널 제어
-│   ├── parser.c           토큰화, 따옴표/변수 확장, 문법 분석
-│   ├── execute.c          fork/exec, 파이프, 재지향, 대기
+│   ├── parser.c           토큰화, 따옴표/변수/$(...) 확장, 문법 분석
+│   ├── execute.c          fork/exec, 파이프, 재지향, 대기, 명령 치환 캡처
+│   ├── script.c           if/for/while, 함수, 스크립트 실행/완성 판정
+│   ├── lineedit.c         raw 모드 라인 에디터, 히스토리, Tab, Ctrl-R
 │   ├── jobs.c             백그라운드 작업 테이블
-│   ├── builtin.c          내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait
+│   ├── builtin.c          내장 명령 디스패치, cd/pwd/echo/exit/jobs/wait/test/read
 │   ├── cmd_ls.c           ls
 │   ├── cmd_fs.c           mkdir, rmdir, ln, cp, rm, mv
 │   ├── cmd_text.c         cat, grep
+│   ├── cmd_trace.c        ptrace 기반 시스템 호출 추적
+│   ├── trace_syscalls.h   x86_64 시스템 호출 이름 테이블 (생성 파일)
 │   ├── cmd_net.c          netserv, netcli, HMAC, watcher
 │   ├── cmd_pipestat.c     파이프 계측
 │   ├── cmd_explain.c      파서 결과 시각화
@@ -528,21 +655,27 @@ SIGNAL TEST PASSED
 │   ├── cmd_serve.c        HTTP 파일 서버
 │   ├── cmd_watch.c        주기 실행
 │   ├── sha256.c           SHA-256/HMAC
-│   └── util.c             공용 유틸
+│   └── util.c             공용 유틸, 파일 읽기
 ├── tests/
 │   ├── run_tests.sh
 │   ├── test_net.sh
 │   ├── test_file_input.sh
 │   ├── test_ext.sh
+│   ├── test_script.sh
+│   ├── test_trace.sh
 │   ├── test_sha256.c
 │   ├── test_signals.py
+│   ├── test_lineedit.py
 │   └── manual_test.sh
+├── tools/
+│   └── gen_trace_names.py 시스템 호출 이름 테이블 생성기
 └── docs/
     ├── REPORT.md / REPORT.docx / REPORT.hwp / REPORT.pdf
     ├── REPORT.html
     ├── make_report.py
-    ├── convert_hwp.py
-    └── make_pdf.py
+    ├── make_pdf.py
+    ├── make_hwp_text.py
+    └── convert_hwp.py
 ```
 
 ## 4. 내장 명령 옵션
@@ -566,17 +699,27 @@ SIGNAL TEST PASSED
 | `watch` | `-n SEC`, `-c COUNT` |
 | `prompt` | `on`, `off` |
 | `pipestat` | `pipestat 'cmd1 | cmd2'` |
+| `history` | `history [-c]` |
+| `test` | `test EXPR`, `[ EXPR ]` (`-e`, `-f`, `-d`, `-z`, `-n`, `=`, `!=`, 수 비교) |
+| `read` | `read [-r] VAR...` |
+| `shift` | `shift [N]` |
+| `source` / `.` | `source FILE [ARGS...]` |
+| `trace` | `-c`, `-f`, `-e NAME[,NAME...]`, `-e trace=NAME` |
 
 ## 5. 제약
 
-- 명령 치환(`$(...)`), `1>&2`, `fg`/`bg`는 지원하지 않습니다.
-- 변수 확장 결과의 단어 분할은 하지 않습니다. `$VAR`는 한 인자로 유지됩니다.
+- 산술 확장 `$((...))`와 `case`/`select`는 지원하지 않습니다.
+- `break`/`continue`의 단계 인자(`break 2`)는 받아들이지만 한 단계만 빠져나옵니다.
+- 루프/`if` 전체를 파이프로 연결하는 `done | cmd`, `fi | cmd`는 지원하지 않습니다.
+- 변수 확장 결과의 단어 분할은 제한적으로만 합니다. `for`의 단어 목록과
+  `"$@"`는 분리되지만, 일반 명령 인자의 `$VAR`는 한 인자로 유지됩니다.
 - 원격 명령의 백그라운드 실행(`&`)은 거부합니다.
 - `undo`는 마지막 한 건만 복원합니다. 휴지통은 `~/.myshell_trash`에 쌓입니다.
 - 원격 명령은 명령마다 자식 프로세스에서 실행되므로 `cd`가 다음 명령에 유지되지 않습니다.
 - netserv는 기본적으로 127.0.0.1에만 바인딩합니다. 외부 주소를 열려면 `-s TOKEN`이 필요합니다.
 - serve는 기본적으로 127.0.0.1에 바인딩하며 별도 인증은 없습니다. 외부 공개는 피합니다.
 - `grep`은 POSIX 기본/확장 정규표현식과 고정 문자열(`-F`)을 지원합니다.
+- `trace`는 x86_64 Linux 전용이며, 컨테이너 등에서 `ptrace`가 차단되면 동작하지 않습니다.
 
 ## 6. 팀 역할
 
@@ -588,10 +731,14 @@ SIGNAL TEST PASSED
 ## 7. 보고서 재생성
 
 ```bash
-python docs/make_report.py   # REPORT.md, REPORT.docx, REPORT.html
-python docs/convert_hwp.py   # REPORT.hwp (Windows + Hancom Office)
-python docs/make_pdf.py      # REPORT.pdf (Chrome/Edge headless)
+python docs/make_report.py     # REPORT.md, REPORT.docx, REPORT.html
+python docs/make_pdf.py        # REPORT.pdf (Chrome/Edge headless, 서식본)
+python docs/make_hwp_text.py   # REPORT.hwp (Hancom, 편집 가능한 텍스트본)
 ```
+
+`make_hwp_text.py`는 Hancom Office가 설치된 Windows에서 실행합니다.
+`convert_hwp.py`는 HTML/DOCX를 Hancom으로 가져와 서식을 맞추는 실험적 경로이며,
+환경에 따라 불안정하므로 기본 HWP 생성에는 텍스트 경로를 사용합니다.
 
 ## 8. GitHub 및 라이선스
 

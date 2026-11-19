@@ -19,7 +19,7 @@
 #include <termios.h>
 
 #define MSH_NAME          "myshell"
-#define MSH_VERSION       "1.0.0"
+#define MSH_VERSION       "1.1.0"
 #define MSH_PROMPT        "shell> "
 #define MSH_MAX_JOBS      64
 #define MSH_MAX_ARGS      256
@@ -106,6 +106,11 @@ typedef struct {
     char *command;
 } job_t;
 
+typedef struct {
+    char *name;
+    char *body;
+} msh_function_t;
+
 typedef struct shell_state {
     int interactive;
     int should_exit;
@@ -113,6 +118,19 @@ typedef struct shell_state {
     int last_status;    /* $? */
     double last_duration;  /* seconds */
     int show_prompt_info;
+
+    char **history;
+    int history_count;
+    int history_cap;
+
+    /* Positional parameters ($1, $2, ...), set by scripts and functions. */
+    char **positional;
+    int positional_count;
+
+    msh_function_t *functions;
+    int function_count;
+    int function_cap;
+
     pid_t shell_pid;
     pid_t shell_pgid;
     pid_t last_bg_pid;  /* $! */
@@ -135,6 +153,8 @@ int parse_line(const char *line, shell_state_t *sh,
 void free_command_list(command_list_t *list);
 void free_pipeline(pipeline_t *pl);
 void free_command(command_t *cmd);
+char *msh_expand_word(const char *raw, shell_state_t *sh, char **error);
+const char *msh_find_substitution_end(const char *p);
 
 /* ------------------------------------------------------------------ */
 /* execute.c                                                          */
@@ -145,6 +165,20 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh);
 int apply_redirections(const redirect_t *redir);
 int has_redirections(const redirect_t *redir);
 void reset_child_signals(void);
+int msh_execute_simple(const char *text, shell_state_t *sh);
+int msh_capture_command(const char *command, shell_state_t *sh, char **output);
+
+/* ------------------------------------------------------------------ */
+/* script.c : control flow, functions, and script files               */
+/* ------------------------------------------------------------------ */
+
+int script_execute(const char *source, shell_state_t *sh);
+int script_source_is_complete(const char *source);
+int script_source_needs_parser(const char *source);
+int msh_is_function(shell_state_t *sh, const char *name);
+int msh_call_function(shell_state_t *sh, const char *name, int argc,
+                      char **argv);
+void msh_functions_free(shell_state_t *sh);
 
 /* Execute one command line with the shell's parser/executor.  Used by the
  * network extension (netserv) to run a command received over TCP. */
@@ -155,6 +189,19 @@ int cmd_serve(int argc, char **argv, shell_state_t *sh);
 int cmd_watch(int argc, char **argv, shell_state_t *sh);
 int cmd_prompt(int argc, char **argv, shell_state_t *sh);
 int cmd_pipestat(int argc, char **argv, shell_state_t *sh);
+int cmd_history(int argc, char **argv, shell_state_t *sh);
+int cmd_trace(int argc, char **argv, shell_state_t *sh);
+const char *const *msh_builtin_names(int *count);
+
+/* lineedit.c */
+char *lineedit_read(const char *prompt, shell_state_t *sh);
+void history_init(shell_state_t *sh);
+void history_add(shell_state_t *sh, const char *line);
+void history_save(shell_state_t *sh, const char *line);
+void history_print(shell_state_t *sh);
+char *history_expand(const char *line, shell_state_t *sh);
+void history_clear(shell_state_t *sh);
+void history_free(shell_state_t *sh);
 int trash_move(const char *path);
 int trash_move_ex(const char *path, const char *undo_extra);
 
@@ -251,5 +298,6 @@ int msh_parse_octal(const char *text, mode_t *mode);
 void msh_format_mode(mode_t mode, char out[11]);
 long long msh_file_size(const struct stat *st);
 void msh_format_size(long long size, char *out, size_t out_size);
+char *msh_read_file(const char *path);
 
 #endif /* MYSHELL_H */

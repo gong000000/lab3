@@ -152,10 +152,133 @@ static int is_token_delim(char c)
 /* Expansion                                                          */
 /* ------------------------------------------------------------------ */
 
+static void wb_putvalue(wordbuf_t *wb, shell_state_t *sh, int index)
+{
+    if (index == 0)
+        wb_puts(wb, MSH_NAME);
+    else if (index <= sh->positional_count && sh->positional != NULL)
+        wb_puts(wb, sh->positional[index - 1]);
+}
+
+static void wb_putall(wordbuf_t *wb, shell_state_t *sh)
+{
+    int i;
+
+    for (i = 0; i < sh->positional_count; ++i) {
+        if (i > 0)
+            wb_putc(wb, ' ');
+        wb_puts(wb, sh->positional[i]);
+    }
+}
+
+/* Find the ')' that closes a $(...) substitution.  Nested parentheses and
+ * quoted text are skipped.  Returns NULL when the substitution is not
+ * closed. */
+const char *msh_find_substitution_end(const char *p)
+{
+    int depth = 1;
+    int in_single = 0;
+    int in_double = 0;
+
+    while (*p != '\0') {
+        char c = *p;
+
+        if (in_single) {
+            if (c == '\'')
+                in_single = 0;
+            ++p;
+            continue;
+        }
+        if (c == '\\') {
+            if (p[1] != '\0')
+                ++p;
+            ++p;
+            continue;
+        }
+        if (in_double) {
+            if (c == '"')
+                in_double = 0;
+            else if (c == '\\' && p[1] != '\0')
+                ++p;
+            ++p;
+            continue;
+        }
+        if (c == '\'') {
+            in_single = 1;
+            ++p;
+            continue;
+        }
+        if (c == '"') {
+            in_double = 1;
+            ++p;
+            continue;
+        }
+        if (c == '(') {
+            ++depth;
+        } else if (c == ')') {
+            --depth;
+            if (depth == 0)
+                return p;
+        }
+        ++p;
+    }
+    return NULL;
+}
+
+static int expand_substitution(const char **pp, wordbuf_t *wb,
+                               shell_state_t *sh, char **error)
+{
+    const char *start = *pp + 2;       /* skip "$(" */
+    const char *end = msh_find_substitution_end(start);
+    char *inner;
+    char *output = NULL;
+    char *p;
+    int rc;
+
+    if (end == NULL) {
+        free(wb->buf);
+        wb->buf = NULL;
+        wb->len = wb->cap = 0;
+        *error = msh_strdup("bad substitution: missing ')'");
+        return -1;
+    }
+
+    inner = msh_strndup(start, (size_t)(end - start));
+    rc = msh_capture_command(inner, sh, &output);
+    free(inner);
+    if (rc != 0) {
+        free(output);
+        free(wb->buf);
+        wb->buf = NULL;
+        wb->len = wb->cap = 0;
+        *error = msh_strdup("command substitution failed");
+        return -1;
+    }
+
+    /* Command substitution behaves like an unquoted expansion: trailing
+     * newlines disappear and other newlines become field separators. */
+    for (p = output; p != NULL && *p != '\0'; ++p) {
+        if (*p == '\n' || *p == '\r')
+            wb_putc(wb, ' ');
+        else
+            wb_putc(wb, *p);
+    }
+    while (wb->len > 0 && wb->buf[wb->len - 1] == ' ')
+        --wb->len;
+    if (wb->buf != NULL)
+        wb->buf[wb->len] = '\0';
+    free(output);
+    *pp = end + 1;
+    return 0;
+}
+
 static int expand_dollar(const char **pp, wordbuf_t *wb, shell_state_t *sh,
                          char **error)
 {
     const char *p = *pp + 1;
+
+    if (*p == '(')
+        return expand_substitution(pp, wb, sh, error);
 
     if (*p == '?') {
         wb_putint(wb, sh->last_status);
@@ -172,13 +295,19 @@ static int expand_dollar(const char **pp, wordbuf_t *wb, shell_state_t *sh,
         *pp = p + 1;
         return 0;
     }
-    if (*p == '0') {
-        wb_puts(wb, MSH_NAME);
+    if (*p == '#') {
+        wb_putint(wb, sh->positional_count);
         *pp = p + 1;
         return 0;
     }
-    if (*p >= '1' && *p <= '9') {
-        *pp = p + 1;                /* positional parameters: unused */
+    if (*p == '@' || *p == '*') {
+        wb_putall(wb, sh);
+        *pp = p + 1;
+        return 0;
+    }
+    if (*p >= '0' && *p <= '9') {
+        wb_putvalue(wb, sh, *p - '0');
+        *pp = p + 1;
         return 0;
     }
 
@@ -202,6 +331,13 @@ static int expand_dollar(const char **pp, wordbuf_t *wb, shell_state_t *sh,
             wb_putint(wb, (long)sh->shell_pid);
         } else if (strcmp(name, "!") == 0) {
             wb_putint(wb, (long)sh->last_bg_pid);
+        } else if (strcmp(name, "#") == 0) {
+            wb_putint(wb, sh->positional_count);
+        } else if (strcmp(name, "@") == 0 || strcmp(name, "*") == 0) {
+            wb_putall(wb, sh);
+        } else if (name[0] >= '0' && name[0] <= '9' &&
+                   name[strspn(name, "0123456789")] == '\0') {
+            wb_putvalue(wb, sh, atoi(name));
         } else if (strcmp(name, "0") == 0) {
             wb_puts(wb, MSH_NAME);
         } else {
@@ -755,6 +891,31 @@ fail:
     free_command_list(&result);
     token_list_free(&tl);
     return -1;
+}
+
+/* Expand one word without globbing.  Used by assignments and for-loops,
+ * where the result is a single string and not an argv entry. */
+char *msh_expand_word(const char *raw, shell_state_t *sh, char **error)
+{
+    token_list_t tl = { 0 };
+    const char *p = raw;
+    char *result;
+    int rc;
+
+    *error = NULL;
+    rc = read_word(&p, &tl, sh, error);
+    if (rc < 0) {
+        token_list_free(&tl);
+        return NULL;
+    }
+    if (rc == 0) {
+        token_list_free(&tl);
+        return msh_strdup("");
+    }
+    result = tl.items[0].text;
+    tl.items[0].text = NULL;
+    token_list_free(&tl);
+    return result;
 }
 
 /* ------------------------------------------------------------------ */

@@ -33,7 +33,10 @@ test: $(TARGET) $(SHA_TEST)
 	./tests/test_net.sh
 	./tests/test_file_input.sh
 	./tests/test_ext.sh
+	./tests/test_script.sh
+	./tests/test_trace.sh
 	python3 tests/test_signals.py
+	python3 tests/test_lineedit.py
 
 install: $(TARGET)
 	install -d $(DESTDIR)/usr/local/bin
