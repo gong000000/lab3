@@ -81,6 +81,16 @@ run 'ls g*.txt'
 stdout_is "glob with builtin" $'g1.txt\ng2.txt'
 
 # ------------------------------------------------------------------
+echo "== pipestat =="
+run "pipestat 'echo hello | cat | wc -c'"
+status_is 0 "pipestat status"
+stdout_has "[1] echo hello: 6 bytes" "pipestat stage 1 bytes"
+stdout_has "[3] wc -c" "pipestat stage 3"
+run "pipestat 'echo hello | grep zzz'"
+status_is 1 "pipestat failure status"
+stdout_has "status 1" "pipestat failure report"
+
+# ------------------------------------------------------------------
 echo
 echo "Extension tests passed: $PASS"
 echo "Extension tests failed: $FAIL"

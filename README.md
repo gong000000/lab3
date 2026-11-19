@@ -1,13 +1,30 @@
-# myshell - Lab 3 팀 프로젝트
+# myshell - 시스템 프로그래밍 학습용 투명 쉘
 
 교재 357쪽의 `simplesh.c`를 확장한 POSIX 쉘입니다. Lab 3의 5개 요구사항과
-11개 내장 명령을 모두 유지하고, 그 위에 **시스템 프로그래밍 학습용 투명 쉘**
-컨셉의 기능을 추가했습니다.
+11개 내장 명령을 모두 유지하고, **“실행 과정을 관찰·추적·기록하는 투명 쉘”**
+컨셉의 시스템 프로그래밍 학습 도구를 추가했습니다.
 
 - 저장소: <https://github.com/gong000000/lab3>
 - 라이선스: MIT
 
-## 1. 구현 기능
+## 1. 컨셉
+
+이 프로젝트는 명령을 단순히 실행하는 쉘이 아니라, 쉘과 프로그램이 **어떻게
+동작하는지 보이게 하는 쉘**입니다.
+
+| 도구 | 들여다보는 대상 |
+|---|---|
+| `explain` | 파서가 명령을 해석한 구조 |
+| `pipestat` | 파이프 각 단계의 바이트·시간·종료 코드 |
+| `trace` | 프로세스의 시스템 호출과 인자/반환값 |
+| `dbg` | ELF 심볼, 레지스터, 메모리, 호출 스택, 브레이크포인트 |
+| `inspect` | `/proc` 기반 프로세스 상태, fd, 메모리 맵, 네임스페이스 |
+| `rec`/`replay` | 세션의 명령·출력·상태·시간과 HTML 타임라인 |
+
+즉 “실행하는 쉘” + “실행을 관찰하는 도구”를 한 바이너리에 결합했습니다.
+원 과제 요구사항 1~5와 11개 명령은 그대로 유지합니다.
+
+## 2. 구현 기능
 
 | 구분 | 내용 |
 |---|---|
@@ -16,66 +33,31 @@
 | 시그널 | `SIGINT`(Ctrl-C), `SIGQUIT`(Ctrl-Z), 전경 작업만 종료 |
 | 재지향/파이프 | `<`, `>`, `>>`, `2>`, `2>>`, `2>&1`, `&>`, `&>>`, 다단 `\|` |
 | 필수 내장 명령 | `ls`, `pwd`, `cd`, `mkdir`, `rmdir`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep` |
-| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[`, `read`, `shift`, `source`, `.`, `trace`, `history`, `rec`, `replay` |
+| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[` |
 | 조건부 실행 | `&&`, `\|\|` |
-| glob | `*`, `?`, `[...]` (인용되지 않은 경우) |
-| 파서 시각화 | `explain '명령줄'` |
-| 라인 에디터 | 방향키, Home/End, Backspace/Delete, Ctrl-U/K/W, UTF-8/한글 폭 보정 |
-| 히스토리 | `~/.myshell_history`, `history [-c]`, `!!`, `!N`, `!-N`, Ctrl-R 역검색 |
-| 자동 완성 | Tab으로 내장 명령·`PATH` 실행 파일·파일/디렉터리 완성 |
-| 명령 치환 | `$(...)`, 중첩 치환, 따옴표 안 치환 |
-| 스크립트 | `if/elif/else/fi`, `for`, `while`/`until`, `break`, `continue`, 함수, `return` |
-| 위치 매개변수 | `$1`~`$9`, `$#`, `$@`, `$*`, `${...}`, `shift` |
-| 스크립트 실행 | `myshell SCRIPT [ARGS...]`, `source FILE [ARGS...]`, `.` |
-| 시스템 호출 추적 | `trace [-c] [-f] [-e NAME,...] COMMAND` (x86_64 ptrace, 인자·반환값) |
-| 세션 녹화/재생 | `rec start [-x] FILE`, `rec stop`, `rec export FILE OUT.html`, `replay FILE [-s SPEED]` |
-| 프롬프트 확장 | `prompt on/off` (종료 코드·실행 시간·작업 수) |
+| glob | `*`, `?`, `[...]` |
+| 명령 치환 | `$(...)` |
+| 관찰 도구 | `explain`, `pipestat`, `trace`, `dbg`, `inspect` |
+| 기록/재생 | `rec start/stop/export`, `replay -s` |
 
-확장 기능은 단순한 기능 모음이 아니라 **“시스템 프로그래밍 학습용 투명 쉘”**로
-묶었습니다. `explain`은 파서를, `trace`는 시스템 호출을, `rec`/`replay`는 세션
-전체를 들여다보게 합니다. 즉 “명령을 실행하는 쉘”이 아니라 “실행 과정을
-관찰·기록·재현하는 쉘”입니다.
+## 3. 실행 방법
 
-## 2. 실행 방법
-
-### 2.1 준비
-
-Linux 또는 WSL(Ubuntu)에서 실행합니다.
+### 3.1 빌드
 
 ```bash
 cd /mnt/c/Users/gong0000/Desktop/lab3
-sudo apt update
-sudo apt install -y build-essential python3
-```
-
-### 2.2 빌드
-
-```bash
 make clean
 make
 ```
 
-### 2.3 실행
+### 3.2 실행
 
 ```bash
 ./myshell
-```
-
-```text
-$ ./myshell
-shell> pwd
-/home/gong0000/lab3
-shell> exit
-```
-
-```bash
 ./myshell -c 'exit 7'
-echo $?
-./myshell demo.sh alice bob
-./myshell -c 'for i in 1 2 3; do echo $i; done'
 ```
 
-### 2.4 전체 테스트
+### 3.3 전체 테스트
 
 ```bash
 make test
@@ -83,16 +65,16 @@ make test
 
 ```text
 Passed: 94
-File-input tests passed: 5
-Extension tests passed: 16
-Script tests passed: 56
+File-input tests passed: 4
+Extension tests passed: 21
 Trace tests passed: 32
+Debugger tests passed: 44
 Recording tests passed: 35
+Inspect tests passed: 27
 SIGNAL TEST PASSED
-LINE EDITOR TEST PASSED
 ```
 
-## 3. 요구사항별 시연
+## 4. 원 과제 요구사항 시연
 
 ### (1) exit
 
@@ -166,54 +148,32 @@ shell> cd ..
 shell> rmdir demo
 ```
 
-## 4. 확장 기능 시연
+## 5. 투명 쉘 도구 시연
 
-### 4.1 라인 에디터와 히스토리
-
-```text
-shell> echo 한글
-한글
-shell> ech<Tab>
-shell> echo 자동완성
-자동완성
-shell> pwd
-/home/gong0000/lab3
-shell> <↑>
-shell> pwd
-shell> <Ctrl-R>
-(reverse-i-search)`pwd': pwd
-shell> history
-    1  echo 한글
-    2  echo 자동완성
-    3  pwd
-```
-
-### 4.2 쉘 스크립트
+### 5.1 explain
 
 ```text
-shell> for i in 1 2 3; do echo "i=$i"; done
-i=1
-i=2
-i=3
-shell> if [ -f README.md ]; then echo file; else echo missing; fi
-file
-shell> greet() { echo "hello $1 ($# args)"; }; greet myshell
-hello myshell (1 args)
-shell> echo "pwd=$(pwd)"
-pwd=/home/gong0000/lab3
+shell> explain 'cat a.txt | grep hello > out.txt'
+explain: 1 pipeline(s)
+
+[pipeline 1] foreground (first)
+  └─ cmd: cat a.txt
+  └─ cmd: grep hello
+       stdout → out.txt (truncate)
 ```
 
-```bash
-cat > demo.sh <<'EOS'
-for name in "$1" "$2"; do
-    echo "hello $name"
-done
-echo "count=$#"
-EOS
-./myshell demo.sh alice bob
+### 5.2 pipestat
+
+```text
+shell> pipestat 'echo hello | cat | wc -c'
+6
+
+[1] echo hello: 6 bytes, 0.000s, status 0
+[2] cat: 6 bytes, 0.000s, status 0
+[3] wc -c: 2 bytes, 0.003s, status 0
 ```
 
-### 4.3 시스템 호출 추적
+### 5.3 trace
 
 ```text
 shell> trace -e write /bin/echo hi
@@ -229,7 +189,62 @@ child
 [  1234] write(1, 0x..., 6) = 6
 ```
 
-### 4.4 세션 녹화·재생
+### 5.4 dbg
+
+```text
+shell> dbg ./a.out
+dbg: loaded ./a.out (executable, 10 symbols)
+(dbg) break main
+Breakpoint 1 at 0x401148 (main)
+(dbg) run
+Breakpoint 1, 0x401148 in main ()
+(dbg) regs
+rip=0x401148 rsp=0x7fffffffe4d8 rbp=0x7fffffffe580
+...
+(dbg) bt
+#0  0x401148 in main ()
+...
+(dbg) x/4x $rsp
+0x7fffffffe4d8: 0x000000000040115e ...
+(dbg) step
+Stopped at 0x40114c in main ()
+(dbg) continue
+v=42
+[Inferior exited with status 0]
+(dbg) quit
+```
+
+### 5.5 inspect
+
+```text
+shell> inspect
+shell:
+  pid=1234 ppid=1200 pgid=1234 sid=1234
+  uid=1000 euid=1000 gid=1000 egid=1000
+  cwd=/home/gong0000/lab3
+  umask=0022
+status (/proc/1234/status):
+  Name:   myshell
+  State:  R (running)
+  VmRSS:  ...
+fds (/proc/1234/fd):
+  0   -> /dev/pts/0
+  1   -> /dev/pts/0
+  2   -> /dev/pts/0
+maps (/proc/1234/maps):
+  ...
+namespaces:
+  mnt     mnt:[4026531840]
+  pid     pid:[4026531836]
+  ...
+limits:
+  NOFILE  soft=1024 hard=1048576
+```
+
+옵션: `inspect -f`(fd), `-m`(maps), `-n`(namespaces), `-j`(jobs), `-s`(status),
+`inspect PID`로 다른 프로세스도 조사합니다.
+
+### 5.6 rec/replay
 
 ```text
 shell> rec start lab.rec
@@ -249,39 +264,32 @@ done
 $ rec stop
 recording stopped: lab.rec (4 commands)
 [status=0, 0ms]
-```
-
-```text
 shell> rec export lab.rec out.html
 ```
 
-`rec export`는 서버 없이 열리는 단독 HTML 타임라인을 만듭니다. `rec start -x`를
-사용하면 `explain` 도식과 `trace -c` 요약도 HTML에 포함됩니다. `-x`는 진단을
-위해 명령을 한 번 더 실행하므로 읽기 전용 명령에만 사용합니다. 녹화 중 출력은
-명령이 끝난 뒤 표시되며, `dbg` 같은 화면 제어형 프로그램은 녹화하지 않는 것을
-권장합니다.
+`rec export`는 서버 없이 열리는 단독 HTML 타임라인을 만듭니다. `rec start -x`는
+`explain` 도식과 `trace -c` 요약도 HTML에 포함합니다. `-x`는 진단을 위해 명령을
+한 번 더 실행하므로 읽기 전용 명령에만 사용합니다.
 
-## 5. 소스 규모와 경제성
-
-지침의 경제성 항목은 “1,000줄 이상, 10,000줄 이하를 원칙”으로 합니다.
-현재 규모는 다음과 같습니다.
+## 6. 소스 규모와 경제성
 
 | 항목 | 줄 수 |
 |---|---:|
-| `include/myshell.h` + `src/*.c` | 9,672 |
-| 빈 줄 | 1,120 |
-| 주석 | 363 |
-| 주석·빈 줄 제외 코드 | 8,189 |
+| `include/myshell.h` + `src/*.c` | 8,611 |
+| 빈 줄 | 997 |
+| 주석 | 337 |
+| 주석·빈 줄 제외 코드 | 7,277 |
 | 생성된 `src/trace_syscalls.h` | 137 |
-| 테스트 코드(별도) | 1,314 |
+| 테스트 코드(별도) | 1,201 |
+| 생성 포함 총계 | 8,748 |
 
-- 직접 작성 소스는 **9,672줄**, 생성 테이블을 포함해도 **9,809줄**로 10,000줄 이하입니다.
+- 직접 작성 소스 8,611줄, 생성 테이블 포함 8,748줄로 **10,000줄 이하**입니다.
 - 원 과제 1~5와 11개 내장 명령은 그대로 유지했습니다.
-- 라인 에디터·스크립트·trace·explain·rec를 남기고, 부가 확장(네트워크/HMAC,
-  `dbg`, `pipestat`, `serve`, `watch`, `undo`)은 범위에서 제외해 분량을 줄였습니다.
+- 라인 에디터/스크립트 자동화, 네트워크/HMAC, `serve`, `watch`, `undo`는
+  “투명 쉘” 컨셉과 분량을 위해 제외했습니다.
 - 외부 라이브러리 없이 libc/POSIX만 사용합니다.
 
-## 6. 프로젝트 구조
+## 7. 프로젝트 구조
 
 ```text
 .
@@ -291,32 +299,33 @@ shell> rec export lab.rec out.html
 ├── include/
 │   └── myshell.h          공용 구조체와 함수 선언
 ├── src/
-│   ├── main.c             REPL, 명령 분리, 시그널, 터미널 제어
-│   ├── parser.c           토큰화, 따옴표/변수/$(...) 확장, 문법 분석
-│   ├── execute.c          fork/exec, 파이프, 재지향, 명령 치환 캡처
-│   ├── script.c           if/for/while, 함수, 스크립트 실행
-│   ├── lineedit.c         raw 모드 라인 에디터, 히스토리, Tab, Ctrl-R
-│   ├── cmd_trace.c        ptrace 시스템 호출 추적
-│   ├── cmd_rec.c          세션 녹화/재생/HTML 타임라인
-│   ├── cmd_explain.c      파서 결과 시각화
-│   ├── trace_syscalls.h   x86_64 시스템 호출 이름 테이블 (생성 파일)
-│   ├── jobs.c             백그라운드 작업 테이블
+│   ├── main.c             REPL, 명령 분리, 시그널, 터미널
+│   ├── parser.c           토큰화, 확장, 문법 분석
+│   ├── execute.c          fork/exec, 파이프, 재지향, 캡처
+│   ├── jobs.c             백그라운드 작업
 │   ├── builtin.c          내장 명령 디스패치
 │   ├── cmd_ls.c           ls
 │   ├── cmd_fs.c           mkdir, rmdir, ln, cp, rm, mv
 │   ├── cmd_text.c         cat, grep
+│   ├── cmd_explain.c      파서 시각화
+│   ├── cmd_pipestat.c     파이프 계측
+│   ├── cmd_trace.c        ptrace 시스템 호출 추적
+│   ├── cmd_dbg.c          ELF/ptrace 미니 디버거
+│   ├── cmd_inspect.c      /proc 기반 프로세스 조사
+│   ├── cmd_rec.c          세션 녹화·재생·HTML
+│   ├── trace_syscalls.h   시스템 호출 이름 테이블 (생성)
 │   └── util.c             공용 유틸
 ├── tools/
-│   └── gen_trace_names.py 시스템 호출 이름 테이블 생성기
+│   └── gen_trace_names.py
 ├── tests/
 │   ├── run_tests.sh       94개 기능 테스트
-│   ├── test_file_input.sh 5개 파일 입력 테스트
-│   ├── test_ext.sh        16개 explain/&&/glob 테스트
-│   ├── test_script.sh     56개 스크립트 테스트
-│   ├── test_trace.sh      32개 ptrace 추적 테스트
-│   ├── test_rec.sh        35개 녹화/재생 테스트
-│   ├── test_signals.py    PTY 시그널 테스트
-│   └── test_lineedit.py   PTY 라인 에디터 테스트
+│   ├── test_file_input.sh 4개 파일 입력 테스트
+│   ├── test_ext.sh        21개 explain/&&/glob/pipestat
+│   ├── test_trace.sh      32개 추적 테스트
+│   ├── test_dbg.sh        44개 디버거 테스트
+│   ├── test_rec.sh        35개 녹화 테스트
+│   ├── test_inspect.sh    27개 /proc 조사 테스트
+│   └── test_signals.py    PTY 시그널 테스트
 └── docs/
     ├── REPORT.md / REPORT.docx / REPORT.hwp / REPORT.pdf
     ├── make_report.py
@@ -324,7 +333,7 @@ shell> rec export lab.rec out.html
     └── make_hwp_text.py
 ```
 
-## 7. 내장 명령 옵션
+## 8. 내장 명령 옵션
 
 | 명령 | 옵션 |
 |---|---|
@@ -340,49 +349,47 @@ shell> rec export lab.rec out.html
 | `cat` | `-n`, `-b`, `-E`, `-T`, `-A` |
 | `grep` | `-i`, `-v`, `-n`, `-c`, `-l`, `-r`/`-R`, `-E`, `-F`, `-q`, `-s`, `-h`, `-H`, `-e` |
 | `explain` | `explain '명령줄'` |
-| `prompt` | `on`, `off` |
-| `history` | `history [-c]` |
-| `test` | `test EXPR`, `[ EXPR ]` |
-| `read` | `read [-r] VAR...` |
-| `shift` | `shift [N]` |
-| `source` / `.` | `source FILE [ARGS...]` |
-| `trace` | `-c`, `-f`, `-e NAME[,NAME...]`, `-e trace=NAME` |
+| `pipestat` | `pipestat 'cmd1 | cmd2'` |
+| `trace` | `-c`, `-f`, `-e NAME[,NAME...]` |
+| `dbg` | `PROGRAM [ARGS...]`; `break`, `run`, `continue`, `step`, `finish`, `bt`, `regs`, `x/Nx`, `info break`, `delete`, `quit` |
+| `inspect` | `-f`, `-m`, `-n`, `-j`, `-s`, `PID` |
 | `rec` | `start [-x] FILE`, `stop`, `status`, `export FILE HTML` |
-| `replay` | `replay FILE [-s SPEED]`, `-x` |
+| `replay` | `FILE [-s SPEED]`, `-x` |
 
-## 8. 제약
+## 9. 제약
 
-- 산술 확장 `$((...))`, `case`/`select`는 지원하지 않습니다.
-- `break`/`continue`의 단계 인자(`break 2`)는 한 단계만 빠져나옵니다.
-- 루프/`if` 전체를 파이프로 연결하는 `done | cmd`, `fi | cmd`는 지원하지 않습니다.
-- `trace`는 x86_64 Linux 전용이며, 컨테이너 등에서 `ptrace`가 차단되면 동작하지 않습니다.
-- `rec`는 전경 명령의 출력을 명령 종료 후 기록합니다. 화면 제어형 프로그램은
-  녹화에 적합하지 않으며, `-x` 진단은 명령을 한 번 더 실행합니다.
+- 쉘 스크립트 자동화(`if/for/while`, 함수)와 라인 에디터는 최종 범위에서
+  제외했습니다. 원 과제 요구사항에는 포함되지 않습니다.
+- `$(...)` 명령 치환은 지원합니다.
+- `trace`/`dbg`는 x86_64 Linux 전용이며 `ptrace`가 필요합니다.
+- `rec`는 전경 명령의 출력을 명령 종료 후 기록합니다. `-x` 진단은 명령을
+  한 번 더 실행합니다.
+- `dbg`의 `bt`는 프레임 포인터 기반이라 최적화 빌드에서는 부정확할 수 있습니다.
 
-## 9. 팀 역할과 주차별 기록
+## 10. 팀 역할과 주차별 기록
 
 | 팀원 | 학번 | GitHub | 담당 |
 |---|---|---|---|
-| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어, 파서/실행기, 시그널, 라인 에디터, 스크립트, trace, rec, explain, `pwd`/`cd`/`ls`/`mkdir`/`rmdir` |
-| 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `ln`/`cp`/`rm`/`mv`/`cat`/`grep`, 테스트, 문서, PTY/시나리오 검증 |
+| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어, 파서/실행기, 시그널, explain/pipestat/trace/dbg/inspect/rec, `pwd`/`cd`/`ls`/`mkdir`/`rmdir` |
+| 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `ln`/`cp`/`rm`/`mv`/`cat`/`grep`, 테스트, 문서, PTY 검증 |
 
 | 주차 | 류동엽 | 강동우 | 증빙 |
 |---|---|---|---|
-| 11주 | simplesh 분석, 요구사항/파서·실행기 설계 | 파일/텍스트 명령 요구사항, 테스트 항목 | 요구사항 표, Makefile |
-| 12주 | 토큰화·확장·파이프·재지향 | ls/mkdir/rmdir 초안, 테스트 | parser.c, execute.c |
-| 13주 | 프로세스 그룹, tcsetpgrp, SIGINT/SIGQUIT | ln/cp/rm/mv 경계 조건 | PTY 시그널 테스트 |
-| 14주 | 11개 필수 명령 통합, 94개 테스트 | cat/grep 옵션, 확장 테스트 | `Passed: 94` |
-| 15주 | explain, 라인 에디터, 스크립트, trace, rec | 테스트/문서, PTY 시나리오 | 스크립트 56, 추적 32, 녹화 35 |
+| 11주 | simplesh 분석, 요구사항/파서 설계 | 파일/텍스트 명령 분석 | 요구사항 표 |
+| 12주 | 토큰화/확장/파이프/재지향 | ls/mkdir/rmdir 초안 | parser.c, execute.c |
+| 13주 | 프로세스 그룹/시그널 | ln/cp/rm/mv 경계 | PTY 테스트 |
+| 14주 | 11개 명령 통합, 94개 테스트 | cat/grep 옵션 | `Passed: 94` |
+| 15주 | explain/pipestat/trace/dbg/inspect/rec | 테스트/문서/PTY | 기능별 커밋 |
 
-## 10. 보고서 재생성
+## 11. 보고서 재생성
 
 ```bash
-python docs/make_report.py     # REPORT.md, REPORT.docx, REPORT.html
-python docs/make_pdf.py        # REPORT.pdf (Chrome/Edge headless, 서식본)
-python docs/make_hwp_text.py   # REPORT.hwp (Hancom, 편집 가능한 텍스트본)
+python docs/make_report.py
+python docs/make_pdf.py
+python docs/make_hwp_text.py
 ```
 
-## 11. GitHub 및 라이선스
+## 12. GitHub 및 라이선스
 
 - <https://github.com/gong000000/lab3>
 - Collaborator: `pizza0420` (강동우), write 권한

@@ -26,11 +26,11 @@ test: $(TARGET)
 	./tests/run_tests.sh
 	./tests/test_file_input.sh
 	./tests/test_ext.sh
-	./tests/test_script.sh
 	./tests/test_trace.sh
+	./tests/test_dbg.sh
 	./tests/test_rec.sh
+	./tests/test_inspect.sh
 	python3 tests/test_signals.py
-	python3 tests/test_lineedit.py
 
 install: $(TARGET)
 	install -d $(DESTDIR)/usr/local/bin

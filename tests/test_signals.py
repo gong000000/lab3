@@ -62,14 +62,6 @@ def main():
     out = drain(fd)
     assert b"signal-test" in out, out
 
-    # Optional extended prompt: status, elapsed time, running jobs.
-    os.write(fd, b"prompt on\n")
-    out = drain(fd)
-    assert b"shell [" in out, out
-    os.write(fd, b"prompt off\n")
-    out = drain(fd)
-    assert b"shell> " in out, out
-
     # Ctrl-C while a foreground child is running: shell must survive.
     os.write(fd, b"sleep 30\n")
     time.sleep(0.3)

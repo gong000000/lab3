@@ -99,8 +99,6 @@ static void init_shell(shell_state_t *sh, int allow_interactive)
     g_shell = sh;
 
     sh->interactive = allow_interactive && isatty(STDIN_FILENO);
-    if (sh->interactive)
-        history_init(sh);
     if (!sh->interactive) {
         char cwd[4096];
         if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -229,9 +227,6 @@ int shell_execute_line(const char *line, shell_state_t *sh)
     char *cursor;
     int overall = 0;
 
-    if (script_source_needs_parser(line))
-        return script_execute(line, sh);
-
     copy = msh_strdup(line);
     cursor = copy;
 
@@ -277,11 +272,6 @@ static void execute_text(const char *text, shell_state_t *sh)
     char *copy;
     char *save = NULL;
     char *line;
-
-    if (script_source_needs_parser(text)) {
-        (void)script_execute(text, sh);
-        return;
-    }
 
     copy = msh_strdup(text);
     line = strtok_r(copy, "\n", &save);
@@ -337,105 +327,34 @@ static int run_repl(shell_state_t *sh)
 
     while (!sh->should_exit && !g_terminate) {
         char prompt[256];
-        char *command;
-        int owned = 0;
 
         job_reap(sh);
         build_prompt(sh, prompt, sizeof(prompt));
-
         if (sh->interactive) {
-            char *expanded;
-
-            line = lineedit_read(prompt, sh);
-            if (line == NULL)
-                break;
-            if (line[0] == '\0') {
-                free(line);
-                line = NULL;
-                continue;
-            }
-            expanded = history_expand(line, sh);
-            if (expanded == NULL) {
-                free(line);
-                line = NULL;
-                continue;
-            }
-            history_add(sh, expanded);
-            history_save(sh, expanded);
-            free(line);
-            line = expanded;
-            command = line;
-        } else {
-            if (!read_line_plain(&line, &cap)) {
-                if (errno == EINTR && !g_terminate) {
-                    clearerr(stdin);
-                    continue;
-                }
-                break;
-            }
-            if (line[0] == '\0')
-                continue;
-            command = line;
+            fputs(prompt, stdout);
+            fflush(stdout);
         }
-
-        /* Keep reading while a block (if/for/while/function) or a
-         * quoted string is still open. */
-        while (command != NULL && !script_source_is_complete(command)) {
-            char *more = NULL;
-            char *joined;
-
-            if (sh->interactive) {
-                more = lineedit_read("... ", sh);
-                if (more == NULL || more[0] == '\0') {
-                    free(more);
-                    if (owned)
-                        free(command);
-                    command = NULL;
-                    break;
-                }
-            } else {
-                size_t morecap = 0;
-
-                if (!read_line_plain(&more, &morecap)) {
-                    free(more);
-                    break;
-                }
+        if (!read_line_plain(&line, &cap)) {
+            if (errno == EINTR && !g_terminate) {
+                clearerr(stdin);
+                continue;
             }
-
-            joined = msh_malloc(strlen(command) + strlen(more) + 2);
-            sprintf(joined, "%s\n%s", command, more);
-            if (owned)
-                free(command);
-            free(more);
-            command = joined;
-            owned = 1;
+            break;
         }
-
-        if (command == NULL) {
-            if (sh->interactive) {
-                free(line);
-                line = NULL;
-            }
+        if (line[0] == '\0')
             continue;
-        }
 
         {
             struct timespec start, end;
 
             clock_gettime(CLOCK_MONOTONIC, &start);
             if (rec_is_active())
-                (void)rec_run_and_record(command, sh);
+                (void)rec_run_and_record(line, sh);
             else
-                shell_execute_line(command, sh);
+                shell_execute_line(line, sh);
             clock_gettime(CLOCK_MONOTONIC, &end);
             sh->last_duration = (double)(end.tv_sec - start.tv_sec) +
                                 (double)(end.tv_nsec - start.tv_nsec) / 1e9;
-        }
-        if (owned)
-            free(command);
-        if (sh->interactive) {
-            free(line);
-            line = NULL;
         }
     }
 
@@ -448,7 +367,7 @@ static int run_repl(shell_state_t *sh)
 static void print_usage(void)
 {
     fprintf(stderr,
-            "usage: %s [-c command] [script [args...]]\n", MSH_NAME);
+            "usage: %s [-c command]\n", MSH_NAME);
 }
 
 int main(int argc, char **argv)
@@ -462,7 +381,7 @@ int main(int argc, char **argv)
     if (argc > 1 && (strcmp(argv[1], "--help") == 0 ||
                      strcmp(argv[1], "-h") == 0)) {
         printf("myshell %s - a small POSIX shell\n", MSH_VERSION);
-        printf("usage: %s [-c command] [script [args...]]\n", MSH_NAME);
+        printf("usage: %s [-c command]\n", MSH_NAME);
         return 0;
     }
     if (argc > 1 && strcmp(argv[1], "--version") == 0) {
@@ -481,30 +400,7 @@ int main(int argc, char **argv)
         execute_text(argv[2], &sh);
         rc = sh.should_exit ? sh.exit_status : sh.last_status;
         job_cleanup(&sh);
-        msh_functions_free(&sh);
         rec_shutdown();
-        history_free(&sh);
-        restore_terminal();
-        return rc;
-    }
-
-    if (argc > 1 && argv[1][0] != '-') {
-        char *script = msh_read_file(argv[1]);
-
-        if (script == NULL) {
-            msh_perror(argv[1]);
-            return 127;
-        }
-        init_shell(&sh, 0);
-        sh.positional = argv + 2;
-        sh.positional_count = argc - 2;
-        (void)script_execute(script, &sh);
-        free(script);
-        rc = sh.should_exit ? sh.exit_status : sh.last_status;
-        job_cleanup(&sh);
-        msh_functions_free(&sh);
-        rec_shutdown();
-        history_free(&sh);
         restore_terminal();
         return rc;
     }
@@ -517,9 +413,7 @@ int main(int argc, char **argv)
     init_shell(&sh, 1);
     rc = run_repl(&sh);
     job_cleanup(&sh);
-    msh_functions_free(&sh);
     rec_shutdown();
-    history_free(&sh);
     restore_terminal();
     return rc;
 }

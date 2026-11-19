@@ -122,11 +122,6 @@ static int do_builtin(command_t *cmd, shell_state_t *sh)
     return run_builtin(cmd->argc, cmd->argv, sh, 0);
 }
 
-static int do_function(command_t *cmd, shell_state_t *sh)
-{
-    return msh_call_function(sh, cmd->argv[0], cmd->argc - 1, cmd->argv + 1);
-}
-
 static int run_parent_action(command_t *cmd, shell_state_t *sh,
                              int (*action)(command_t *, shell_state_t *))
 {
@@ -198,11 +193,6 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh)
             sh->last_status = rc;
             return rc;
         }
-        if (msh_is_function(sh, cmd->argv[0])) {
-            int rc = run_parent_action(cmd, sh, do_function);
-            sh->last_status = rc;
-            return rc;
-        }
     }
 
     pids = msh_calloc((size_t)n, sizeof(pid_t));
@@ -255,14 +245,6 @@ int execute_pipeline(pipeline_t *pl, shell_state_t *sh)
 
             if (apply_redirections(&cmd->redir) < 0)
                 _exit(1);
-
-            if (msh_is_function(sh, cmd->argv[0])) {
-                int rc = msh_call_function(sh, cmd->argv[0],
-                                           cmd->argc - 1, cmd->argv + 1);
-                fflush(stdout);
-                fflush(stderr);
-                _exit(rc);
-            }
 
             if (is_builtin(cmd->argv[0])) {
                 int rc = run_builtin(cmd->argc, cmd->argv, sh, 1);
@@ -392,8 +374,8 @@ int execute_command_list(command_list_t *list, shell_state_t *sh)
     return last;
 }
 
-/* Parse and execute a single statement that is already split on ';', '&',
- * and newlines.  The script interpreter uses this for command nodes. */
+/* Parse and execute one command segment.  main.c uses this after splitting
+ * a line on ';' and '&'. */
 int msh_execute_simple(const char *text, shell_state_t *sh)
 {
     command_list_t list;

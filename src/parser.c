@@ -895,29 +895,6 @@ fail:
 
 /* Expand one word without globbing.  Used by assignments and for-loops,
  * where the result is a single string and not an argv entry. */
-char *msh_expand_word(const char *raw, shell_state_t *sh, char **error)
-{
-    token_list_t tl = { 0 };
-    const char *p = raw;
-    char *result;
-    int rc;
-
-    *error = NULL;
-    rc = read_word(&p, &tl, sh, error);
-    if (rc < 0) {
-        token_list_free(&tl);
-        return NULL;
-    }
-    if (rc == 0) {
-        token_list_free(&tl);
-        return msh_strdup("");
-    }
-    result = tl.items[0].text;
-    tl.items[0].text = NULL;
-    token_list_free(&tl);
-    return result;
-}
-
 /* ------------------------------------------------------------------ */
 /* Freeing                                                            */
 /* ------------------------------------------------------------------ */

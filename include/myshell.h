@@ -106,11 +106,6 @@ typedef struct {
     char *command;
 } job_t;
 
-typedef struct {
-    char *name;
-    char *body;
-} msh_function_t;
-
 typedef struct shell_state {
     int interactive;
     int should_exit;
@@ -119,17 +114,9 @@ typedef struct shell_state {
     double last_duration;  /* seconds */
     int show_prompt_info;
 
-    char **history;
-    int history_count;
-    int history_cap;
-
     /* Positional parameters ($1, $2, ...), set by scripts and functions. */
     char **positional;
     int positional_count;
-
-    msh_function_t *functions;
-    int function_count;
-    int function_cap;
 
     pid_t shell_pid;
     pid_t shell_pgid;
@@ -153,7 +140,6 @@ int parse_line(const char *line, shell_state_t *sh,
 void free_command_list(command_list_t *list);
 void free_pipeline(pipeline_t *pl);
 void free_command(command_t *cmd);
-char *msh_expand_word(const char *raw, shell_state_t *sh, char **error);
 const char *msh_find_substitution_end(const char *p);
 
 /* ------------------------------------------------------------------ */
@@ -169,39 +155,22 @@ int msh_execute_simple(const char *text, shell_state_t *sh);
 int msh_capture_command(const char *command, shell_state_t *sh, char **output);
 
 /* ------------------------------------------------------------------ */
-/* script.c : control flow, functions, and script files               */
+/* shell entry points                                                 */
 /* ------------------------------------------------------------------ */
-
-int script_execute(const char *source, shell_state_t *sh);
-int script_source_is_complete(const char *source);
-int script_source_needs_parser(const char *source);
-int msh_is_function(shell_state_t *sh, const char *name);
-int msh_call_function(shell_state_t *sh, const char *name, int argc,
-                      char **argv);
-void msh_functions_free(shell_state_t *sh);
 
 /* Execute one command line with the shell's parser/executor. */
 int shell_execute_line(const char *line, shell_state_t *sh);
 int cmd_explain(int argc, char **argv, shell_state_t *sh);
-int cmd_prompt(int argc, char **argv, shell_state_t *sh);
-int cmd_history(int argc, char **argv, shell_state_t *sh);
 int cmd_trace(int argc, char **argv, shell_state_t *sh);
+int cmd_pipestat(int argc, char **argv, shell_state_t *sh);
+int cmd_dbg(int argc, char **argv, shell_state_t *sh);
+int cmd_inspect(int argc, char **argv, shell_state_t *sh);
 int cmd_rec(int argc, char **argv, shell_state_t *sh);
 int cmd_replay(int argc, char **argv, shell_state_t *sh);
 int rec_is_active(void);
 int rec_run_and_record(const char *line, shell_state_t *sh);
 void rec_shutdown(void);
-const char *const *msh_builtin_names(int *count);
 
-/* lineedit.c */
-char *lineedit_read(const char *prompt, shell_state_t *sh);
-void history_init(shell_state_t *sh);
-void history_add(shell_state_t *sh, const char *line);
-void history_save(shell_state_t *sh, const char *line);
-void history_print(shell_state_t *sh);
-char *history_expand(const char *line, shell_state_t *sh);
-void history_clear(shell_state_t *sh);
-void history_free(shell_state_t *sh);
 
 /* ------------------------------------------------------------------ */
 /* jobs.c                                                             */

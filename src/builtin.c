@@ -163,125 +163,6 @@ static int b_test(int argc, char **argv, shell_state_t *sh)
     return test_eval(argv + 1, argc - 1) ? 0 : 1;
 }
 
-/* ------------------------------------------------------------------ */
-/* read / shift / source                                              */
-/* ------------------------------------------------------------------ */
-
-static int b_read(int argc, char **argv, shell_state_t *sh)
-{
-    char line[8192];
-    char *vars[MSH_MAX_ARGS];
-    char *fields[MSH_MAX_ARGS];
-    int nvars = 0;
-    int nfields = 0;
-    int raw = 0;
-    int i;
-    size_t len;
-    char *p;
-
-    (void)sh;
-    for (i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "-r") == 0)
-            raw = 1;
-        else if (nvars < MSH_MAX_ARGS - 1)
-            vars[nvars++] = argv[i];
-    }
-
-    if (fgets(line, sizeof(line), stdin) == NULL)
-        return 1;
-    len = strlen(line);
-    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-        line[--len] = '\0';
-
-    if (!raw) {
-        char *src = line;
-        char *dst = line;
-
-        while (*src != '\0') {
-            if (*src == '\\' && src[1] != '\0')
-                ++src;
-            *dst++ = *src++;
-        }
-        *dst = '\0';
-    }
-
-    p = line;
-    while (*p != '\0' && nfields < MSH_MAX_ARGS - 1) {
-        while (*p == ' ' || *p == '\t')
-            ++p;
-        if (*p == '\0')
-            break;
-        fields[nfields++] = p;
-        while (*p != '\0' && *p != ' ' && *p != '\t')
-            ++p;
-        if (*p != '\0')
-            *p++ = '\0';
-    }
-
-    if (nvars == 0) {
-        setenv("REPLY", line, 1);
-        return 0;
-    }
-    for (i = 0; i < nvars; ++i) {
-        if (i < nfields)
-            setenv(vars[i], fields[i], 1);
-        else
-            setenv(vars[i], "", 1);
-    }
-    return 0;
-}
-
-static int b_shift(int argc, char **argv, shell_state_t *sh)
-{
-    int count = 1;
-
-    if (argc > 2) {
-        msh_usage("shift [n]");
-        return 2;
-    }
-    if (argc == 2)
-        count = atoi(argv[1]);
-    if (count < 0) {
-        msh_usage("shift [n]");
-        return 2;
-    }
-    if (count > sh->positional_count)
-        return 1;
-    if (sh->positional != NULL)
-        sh->positional += count;
-    sh->positional_count -= count;
-    return 0;
-}
-
-static int b_source(int argc, char **argv, shell_state_t *sh)
-{
-    char *text;
-    char **saved_args;
-    int saved_count;
-    int rc;
-
-    if (argc < 2) {
-        msh_usage("source FILE [args...]");
-        return 2;
-    }
-    text = msh_read_file(argv[1]);
-    if (text == NULL) {
-        msh_perror(argv[1]);
-        return 1;
-    }
-    saved_args = sh->positional;
-    saved_count = sh->positional_count;
-    if (argc > 2) {
-        sh->positional = argv + 2;
-        sh->positional_count = argc - 2;
-    }
-    rc = script_execute(text, sh);
-    sh->positional = saved_args;
-    sh->positional_count = saved_count;
-    free(text);
-    return rc;
-}
-
 static const builtin_entry_t builtins[] = {
     { "cd",     builtin_cd,     1 },
     { "pwd",    builtin_pwd,    0 },
@@ -305,15 +186,12 @@ static const builtin_entry_t builtins[] = {
     { "cat",    b_cat,          0 },
     { "grep",   b_grep,         0 },
     { "explain", cmd_explain,   0 },
-    { "prompt",  cmd_prompt,    1 },
-    { "history", cmd_history,   0 },
     { "test",    b_test,        0 },
     { "[",       b_test,        0 },
-    { "read",    b_read,        1 },
-    { "shift",   b_shift,       1 },
-    { "source",  b_source,      1 },
-    { ".",       b_source,      1 },
     { "trace",   cmd_trace,     0 },
+    { "pipestat", cmd_pipestat,  0 },
+    { "dbg",     cmd_dbg,       1 },
+    { "inspect", cmd_inspect,   1 },
     { "rec",     cmd_rec,       1 },
     { "replay",  cmd_replay,    0 },
 };
@@ -714,29 +592,18 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  cd pwd echo exit jobs wait export unset help true false\n");
     printf("  ls mkdir rmdir ln cp rm mv cat grep\n");
     printf("  explain 'command line'\n");
-    printf("  prompt [on|off]\n");
-    printf("  history [-c]\n");
     printf("  test EXPR    (or [ EXPR ])\n");
-    printf("  read [-r] VAR...  shift [N]  source FILE [ARGS...]\n");
     printf("  trace [-c] [-f] [-e NAME[,NAME...]] COMMAND...\n");
+    printf("  pipestat 'command1 | command2'\n");
+    printf("  dbg PROGRAM [ARGS...]   (ELF/ptrace mini debugger)\n");
+    printf("  inspect [PID]          (/proc status, fds, maps, namespaces)\n");
     printf("  rec start [-x] FILE | rec stop | rec status | rec export FILE HTML\n");
     printf("  replay FILE [-s SPEED]  (replay recorded commands/output)\n\n");
-    printf("Scripting:\n");
-    printf("  $(command)  command substitution\n");
-    printf("  if CMD; then ...; elif CMD; then ...; else ...; fi\n");
-    printf("  for NAME in WORDS; do ...; done\n");
-    printf("  while CMD; do ...; done      until CMD; do ...; done\n");
-    printf("  NAME() { ...; }              break / continue / return\n");
-    printf("  myshell SCRIPT [ARGS...]\n\n");
+    printf("Syntax:\n  $(command) command substitution\n\n");
     printf("Interactive keys:\n");
     printf("  Ctrl-C  SIGINT  - interrupt the foreground job\n");
     printf("  Ctrl-Z  SIGQUIT - quit the foreground job (mapped by myshell)\n");
     printf("  Ctrl-D          - end of input / exit\n");
-    printf("  Left/Right/Home/End  - move the cursor\n");
-    printf("  Tab                  - complete commands and file names\n");
-    printf("  Ctrl-R               - reverse history search\n");
-    printf("  Ctrl-U/K/W           - delete before/after/previous word\n");
-    printf("  Up/Down              - browse history\n");
     return 0;
 }
 
@@ -756,48 +623,3 @@ int builtin_false(int argc, char **argv, shell_state_t *sh)
     return 1;
 }
 
-int cmd_prompt(int argc, char **argv, shell_state_t *sh)
-{
-    if (argc > 2) {
-        msh_usage("prompt [on|off]");
-        return 2;
-    }
-    if (argc == 2) {
-        if (strcmp(argv[1], "on") == 0)
-            sh->show_prompt_info = 1;
-        else if (strcmp(argv[1], "off") == 0)
-            sh->show_prompt_info = 0;
-        else {
-            msh_usage("prompt [on|off]");
-            return 2;
-        }
-    }
-    printf("prompt: %s\n", sh->show_prompt_info ? "on" : "off");
-    return 0;
-}
-
-const char *const *msh_builtin_names(int *count)
-{
-    static const char *names[] = {
-        "cd", "pwd", "echo", "exit", "jobs", "wait", "export", "unset",
-        "help", "true", "false", ":", "ls", "mkdir", "rmdir", "ln",
-        "cp", "rm", "mv", "cat", "grep", "explain", "prompt", "history",
-        "test", "[", "read", "shift", "source", ".", "trace", "rec", "replay"
-    };
-    *count = (int)(sizeof(names) / sizeof(names[0]));
-    return names;
-}
-
-int cmd_history(int argc, char **argv, shell_state_t *sh)
-{
-    if (argc == 2 && strcmp(argv[1], "-c") == 0) {
-        history_clear(sh);
-        return 0;
-    }
-    if (argc != 1) {
-        msh_usage("history [-c]");
-        return 2;
-    }
-    history_print(sh);
-    return 0;
-}
