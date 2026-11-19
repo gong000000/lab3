@@ -71,7 +71,16 @@ static void print_shell_identity(shell_state_t *sh)
     mask = umask(0);
     (void)umask(mask);
     printf("  umask=0%03o\n", (unsigned)mask);
-    printf("  foreground_jobs=%d\n", sh->interactive ? 1 : 0);
+    {
+        int i;
+        int running = 0;
+
+        for (i = 0; i < MSH_MAX_JOBS; ++i) {
+            if (sh->jobs[i].used && sh->jobs[i].running)
+                ++running;
+        }
+        printf("  running_jobs=%d\n", running);
+    }
 }
 
 static void print_fds(pid_t pid)

@@ -258,6 +258,5 @@ int msh_parse_octal(const char *text, mode_t *mode);
 void msh_format_mode(mode_t mode, char out[11]);
 long long msh_file_size(const struct stat *st);
 void msh_format_size(long long size, char *out, size_t out_size);
-char *msh_read_file(const char *path);
 
 #endif /* MYSHELL_H */

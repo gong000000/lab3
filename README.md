@@ -275,15 +275,16 @@ shell> rec export lab.rec out.html
 
 | 항목 | 줄 수 |
 |---|---:|
-| `include/myshell.h` + `src/*.c` | 8,611 |
-| 빈 줄 | 997 |
-| 주석 | 337 |
-| 주석·빈 줄 제외 코드 | 7,277 |
+| `include/myshell.h` + `src/*.c` | 8,580 |
+| 빈 줄 | 994 |
+| 주석 | 335 |
+| 주석·빈 줄 제외 코드 | 7,251 |
 | 생성된 `src/trace_syscalls.h` | 137 |
 | 테스트 코드(별도) | 1,201 |
-| 생성 포함 총계 | 8,748 |
+| 생성 포함 총계 | 8,717 |
+| 생성·테스트 포함 총계 | 9,918 |
 
-- 직접 작성 소스 8,611줄, 생성 테이블 포함 8,748줄로 **10,000줄 이하**입니다.
+- 직접 작성 소스 8,580줄, 생성 테이블 포함 8,717줄로 **10,000줄 이하**입니다.
 - 원 과제 1~5와 11개 내장 명령은 그대로 유지했습니다.
 - 라인 에디터/스크립트 자동화, 네트워크/HMAC, `serve`, `watch`, `undo`는
   “투명 쉘” 컨셉과 분량을 위해 제외했습니다.
@@ -349,7 +350,7 @@ shell> rec export lab.rec out.html
 | `cat` | `-n`, `-b`, `-E`, `-T`, `-A` |
 | `grep` | `-i`, `-v`, `-n`, `-c`, `-l`, `-r`/`-R`, `-E`, `-F`, `-q`, `-s`, `-h`, `-H`, `-e` |
 | `explain` | `explain '명령줄'` |
-| `pipestat` | `pipestat 'cmd1 | cmd2'` |
+| `pipestat` | `pipestat 'cmd1 \| cmd2'` |
 | `trace` | `-c`, `-f`, `-e NAME[,NAME...]` |
 | `dbg` | `PROGRAM [ARGS...]`; `break`, `run`, `continue`, `step`, `finish`, `bt`, `regs`, `x/Nx`, `info break`, `delete`, `quit` |
 | `inspect` | `-f`, `-m`, `-n`, `-j`, `-s`, `PID` |
