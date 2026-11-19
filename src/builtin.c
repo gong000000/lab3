@@ -321,6 +321,8 @@ static const builtin_entry_t builtins[] = {
     { ".",       b_source,      1 },
     { "trace",   cmd_trace,     0 },
     { "dbg",     cmd_dbg,       1 },
+    { "rec",     cmd_rec,       1 },
+    { "replay",  cmd_replay,    0 },
 };
 
 static const builtin_entry_t *find_builtin(const char *name)
@@ -730,7 +732,9 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  test EXPR    (or [ EXPR ])\n");
     printf("  read [-r] VAR...  shift [N]  source FILE [ARGS...]\n");
     printf("  trace [-c] [-f] [-e NAME[,NAME...]] COMMAND...\n");
-    printf("  dbg PROGRAM [ARGS...]   (mini gdb: break/run/step/bt/regs/x)\n\n");
+    printf("  dbg PROGRAM [ARGS...]   (mini gdb: break/run/step/bt/regs/x)\n");
+    printf("  rec start [-x] FILE | rec stop | rec status | rec export FILE HTML\n");
+    printf("  replay FILE [-s SPEED]  (replay recorded commands/output)\n\n");
     printf("Scripting:\n");
     printf("  $(command)  command substitution\n");
     printf("  if CMD; then ...; elif CMD; then ...; else ...; fi\n");
@@ -797,7 +801,8 @@ const char *const *msh_builtin_names(int *count)
         "help", "true", "false", ":", "ls", "mkdir", "rmdir", "ln",
         "cp", "rm", "mv", "cat", "grep", "netserv", "netcli", "explain",
         "undo", "serve", "watch", "prompt", "pipestat", "history",
-        "test", "[", "read", "shift", "source", ".", "trace", "dbg"
+        "test", "[", "read", "shift", "source", ".", "trace", "dbg",
+        "rec", "replay"
     };
     *count = (int)(sizeof(names) / sizeof(names[0]));
     return names;

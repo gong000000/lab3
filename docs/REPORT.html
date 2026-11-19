@@ -76,6 +76,7 @@
 <li>재귀 하강 방식의 스크립트 해석기로 if/for/while, 함수, $(...) 명령 치환, 스크립트 파일 실행을 구현한다.</li>
 <li>x86_64 ptrace로 시스템 호출을 추적하는 trace 명령을 구현한다.</li>
 <li>ELF 심볼과 ptrace를 이용해 break/step/bt를 제공하는 미니 디버거 dbg를 구현한다.</li>
+<li>세션의 명령·출력·상태·시간을 기록하고 재생/HTML로 내보내는 rec/replay를 구현한다.</li>
 <li>자동화된 기능 테스트, 네트워크 테스트, PTY 시그널 테스트로 안정성을 검증한다.</li>
 <li>MIT 라이선스로 GitHub에 공개한다.</li>
 </ul>
@@ -133,6 +134,10 @@
 <td>dbg: ELF .symtab/.dynsym, 0xCC 브레이크포인트, regs/x/bt, PIE 주소 보정, SIGSEGV 분석</td>
 </tr>
 <tr>
+<td>세션 녹화/재생</td>
+<td>rec start/stop/export, replay -s, 명령·stdout/stderr·상태·시간 기록, -x explain/trace</td>
+</tr>
+<tr>
 <td>문서/배포</td>
 <td>README, MIT LICENSE, 결과보고서(HWP/PDF), 자동 테스트</td>
 </tr>
@@ -169,14 +174,14 @@
 </tr>
 </tbody></table>
 <h2>1.5 결과 요약</h2>
-<p>최종 프로그램은 직접 작성한 헤더·C 소스 12,770줄(주석·공백 제외 10,880줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 내장 명령과 18개 보조 내장 명령, TCP 원격 쉘, UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기, 미니 디버거를 제공한다. 기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 5개, 스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개와 PTY 시그널/라인 에디터 테스트를 통과했고, ASan/UBSan 빌드에서도 새 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.</p>
+<p>최종 프로그램은 직접 작성한 헤더·C 소스 13,623줄(주석·공백 제외 11,627줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 내장 명령과 20개 보조 내장 명령, TCP 원격 쉘, UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기, 미니 디버거, 세션 녹화기를 제공한다. 기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 5개, 스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 녹화 테스트 35개와 PTY 시그널/라인 에디터 테스트를 통과했고, ASan/UBSan 빌드에서도 새 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.</p>
 <table><thead><tr>
 <th>항목</th>
 <th>결과</th>
 </tr></thead><tbody>
 <tr>
 <td>소스 규모</td>
-<td>직접 작성 12,770줄 + 생성 테이블 393줄, 주석·공백 제외 10,880줄 (지침 상한 소폭 초과)</td>
+<td>직접 작성 13,623줄 + 생성 테이블 393줄, 주석·공백 제외 11,627줄 (지침 상한 약 16% 초과)</td>
 </tr>
 <tr>
 <td>필수 내장 명령</td>
@@ -184,7 +189,7 @@
 </tr>
 <tr>
 <td>보조 내장 명령</td>
-<td>echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history, dbg (18개)</td>
+<td>echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history, dbg, rec, replay (20개)</td>
 </tr>
 <tr>
 <td>기능 테스트</td>
@@ -209,6 +214,10 @@
 <tr>
 <td>디버거 테스트</td>
 <td>44 / 44 통과 (ELF/PIE·브레이크포인트·step·bt·SIGSEGV)</td>
+</tr>
+<tr>
+<td>녹화 테스트</td>
+<td>35 / 35 통과 (rec/replay·출력 캡처·HTML·-x 진단)</td>
 </tr>
 <tr>
 <td>계측 테스트</td>
@@ -331,7 +340,7 @@
 <tr>
 <td>include/myshell.h</td>
 <td>공용 상수, 구조체, 함수 원형</td>
-<td>304</td>
+<td>309</td>
 </tr>
 <tr>
 <td>src/main.c</td>
@@ -392,6 +401,11 @@
 <td>src/cmd_dbg.c</td>
 <td>ELF 심볼, 0xCC 브레이크포인트, 레지스터/메모리/백트레이스</td>
 <td>1263</td>
+</tr>
+<tr>
+<td>src/cmd_rec.c</td>
+<td>세션 녹화/재생, 출력 캡처, 단독 HTML 타임라인</td>
+<td>837</td>
 </tr>
 <tr>
 <td>src/trace_syscalls.h</td>
@@ -499,6 +513,16 @@
 <td>dbg_bp_t</td>
 <td>addr, orig_word, orig_byte, inserted, temporary</td>
 <td>0xCC 브레이크포인트와 복원용 원본 바이트</td>
+</tr>
+<tr>
+<td>rec_item_t</td>
+<td>cmd, out, err, diag, status, ms</td>
+<td>녹화된 명령 하나의 출력·진단·종료 상태·소요 시간</td>
+</tr>
+<tr>
+<td>rec_state_t</td>
+<td>active, fp, path, explain, capturing</td>
+<td>녹화 세션의 파일/옵션/캡처 상태</td>
 </tr>
 <tr>
 <td>filter_t / summary_t</td>
@@ -729,6 +753,37 @@ if (sig == (SIGTRAP | 0x80)) {
 +continue: 같은 재설치 후 PTRACE_CONT
 +bt: ret = PEEKDATA(rbp + 8); rbp = PEEKDATA(rbp)
 +</pre>
+<h3>2.5.12 세션 녹화·재생 rec/replay</h3>
+<p>rec는 REPL에서 다음 명령을 실행할 때 stdout/stderr를 임시 파일로 돌리고, 명령이 끝난 뒤 원래 터미널로 복사하면서 같은 내용을 녹화 파일에 길이 기반으로 기록한다. 이 방식은 cd·변수·함수 같은 쉘 상태를 그대로 유지하면서도 출력과 종료 코드를 함께 남길 수 있다. 출력은 명령이 끝난 뒤 표시되므로 화면을 직접 제어하는 dbg/편집기에는 적합하지 않다.</p>
+<table><thead><tr>
+<th>파일 블록</th>
+<th>내용</th>
+</tr></thead><tbody>
+<tr>
+<td>C</td>
+<td>명령 문자열</td>
+</tr>
+<tr>
+<td>O / E</td>
+<td>stdout / stderr 바이트</td>
+</tr>
+<tr>
+<td>S / T</td>
+<td>종료 코드 / 소요 밀리초</td>
+</tr>
+<tr>
+<td>X</td>
+<td>-x일 때 explain 도식 + trace -c 요약</td>
+</tr>
+</tbody></table>
+<p>replay는 녹화된 출력과 상태를 다시 표시하고, -s 배속으로 명령 간 지연을 조절한다. 명령을 다시 실행하지 않으므로 파일 변경 같은 부작용이 없고, 결과가 결정적이다. rec export는 같은 레코드를 단독 HTML로 변환해 서버 없이 열 수 있게 한다. -x의 trace 요약은 진단을 위해 명령을 한 번 더 실행하므로 읽기 전용 명령에만 사용하도록 안내한다.</p>
+<pre>/* cmd_rec.c: 출력 캡처와 기록 (요약) */
++stdout/stderr를 tmpfile()로 dup2
++shell_execute_line() 실행 (cd/변수/함수는 부모에서 유지)
++fflush 후 원래 fd 복원, tmpfile 내용을 터미널과 레코드에 기록
++레코드: C/O/E/S/T/X 길이 기반 블록
++replay: 명령을 재실행하지 않고 출력/상태/시간을 재생
++</pre>
 <h2>2.6 설계 구성 요소와의 대응</h2>
 <table><thead><tr>
 <th>설계 구성 요소</th>
@@ -748,7 +803,7 @@ if (sig == (SIGTRAP | 0x80)) {
 </tr>
 <tr>
 <td>시험</td>
-<td>94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 56개 스크립트 + 32개 추적 + 44개 디버거 테스트 + PTY 시그널/라인 에디터 테스트</td>
+<td>94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 56개 스크립트 + 32개 추적 + 44개 디버거 + 35개 녹화 테스트 + PTY 시그널/라인 에디터 테스트</td>
 </tr>
 </tbody></table>
 <div style="page-break-before: always;"></div>
@@ -761,17 +816,17 @@ if (sig == (SIGTRAP | 0x80)) {
 <tr>
 <td>경제성</td>
 <td>3~4인이 한 학기에 구현 가능한 1,000~10,000줄</td>
-<td>직접 작성 12,770줄(주석·공백 제외 10,880줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화</td>
+<td>직접 작성 13,623줄(주석·공백 제외 11,627줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화</td>
 </tr>
 <tr>
 <td>안정성</td>
 <td>외부 환경 변화에도 지속적으로 동작</td>
-<td>오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 293개 자동 테스트, ASan/UBSan 검증</td>
+<td>오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 328개 자동 테스트, ASan/UBSan 검증</td>
 </tr>
 <tr>
 <td>생산성</td>
 <td>모든 기능이 동작하고 응용 가능</td>
-<td>11개 필수 명령 + 18개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace/dbg, README/보고서 제공</td>
+<td>11개 필수 명령 + 20개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace/dbg, README/보고서 제공</td>
 </tr>
 <tr>
 <td>윤리성/사회적 영향</td>
@@ -790,11 +845,54 @@ if (sig == (SIGTRAP | 0x80)) {
 </tr>
 </tbody></table>
 <h2>3.1 경제성</h2>
-<p>전체 소스는 직접 작성분 12,770줄(주석·공백 제외 10,880줄)과 생성 테이블 393줄로 구성되어 설계 지침의 1,000~10,000줄 범위를 참고했으며, 최종 디버거 확장으로 상한을 소폭 초과한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.</p>
+<p>지침의 경제성 항목은 “적어도 1,000라인은 넘고 10,000라인은 넘지 않는 것을 원칙”으로 한다. 산정 기준을 빈 줄·주석·생성 파일·테스트로 나누면 다음과 같다.</p>
+<table><thead><tr>
+<th>항목</th>
+<th>줄 수</th>
+<th>설명</th>
+</tr></thead><tbody>
+<tr>
+<td>include/myshell.h + src/*.c</td>
+<td>13,623</td>
+<td>직접 작성한 헤더와 C 소스</td>
+</tr>
+<tr>
+<td>빈 줄</td>
+<td>1,532</td>
+<td>가독성을 위한 공백</td>
+</tr>
+<tr>
+<td>주석</td>
+<td>464</td>
+<td>구현 근거와 인터페이스 설명</td>
+</tr>
+<tr>
+<td>주석·빈 줄 제외 코드</td>
+<td>11,627</td>
+<td>실제 C 문장 기준</td>
+</tr>
+<tr>
+<td>src/trace_syscalls.h</td>
+<td>393</td>
+<td>unistd_64.h에서 생성한 이름 테이블</td>
+</tr>
+<tr>
+<td>tests/*</td>
+<td>1,827</td>
+<td>테스트 코드(위 소스 수치와 별도)</td>
+</tr>
+</tbody></table>
+<p>코드 기준 11,627줄로 원칙 상한을 약 16% 초과한다. 이는 필수 요구사항 1~5와 11개 내장 명령을 훼손하지 않은 채, 라인 에디터·스크립트·파이프 계측·시스템 호출 추적·ELF 디버거·세션 녹화를 하나의 “투명 쉘”로 결합했기 때문이다. 기능을 단순히 많이 넣은 것이 아니라, 모두 같은 파서/실행기/작업 제어 위에서 동작하도록 모듈화했다.</p>
+<ul>
+<li>11개 필수 명령과 요구사항 1~5는 별도 모듈(cmd_*.c)로 유지해 원래 과제의 채점 기준을 보존했다.</li>
+<li>테스트 1,827줄은 제품 소스와 분리해 계산했다.</li>
+<li>serve(544줄), watch(125줄), pipestat(330줄)은 제거 후보로 검토했으나 기존 기능과 시연 자료를 보존하기 위해 유지했다. 이들을 제거해도 10,000줄 이하로 내려가지 않으므로, 삭제보다 산정 근거와 범위 결정을 보고서에 명시하는 쪽을 택했다.</li>
+<li>외부 라이브러리 없이 libc/POSIX만 사용해 의존성과 빌드 비용을 최소화했다.</li>
+</ul>
 <h2>3.2 안정성</h2>
 <p>모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 기능·스크립트·추적·디버거·라인 에디터 테스트를 통과했다.</p>
 <h2>3.3 생산성</h2>
-<p>ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. 라인 에디터와 스크립트, trace, dbg까지 같은 바이너리에 포함되어 별도 도구 없이 시스템 프로그래밍 실습을 할 수 있으며, 테스트는 make test로 재현한다.</p>
+<p>ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. 라인 에디터와 스크립트, trace, dbg, rec까지 같은 바이너리에 포함되어 별도 도구 없이 시스템 프로그래밍 실습을 할 수 있으며, 테스트는 make test로 재현한다. rec로 실습 과정을 녹화한 뒤 HTML로 제출하면 채점자가 명령 흐름과 출력을 서버 없이 재현·검증할 수 있다.</p>
 <h2>3.4 윤리성과 사회적 영향</h2>
 <p>쉘은 파일 삭제·복사·이동 권한을 가지므로 안전장치가 필요하다. rm은 /, ., ..를 거부하고, 재귀 삭제는 심볼릭 링크를 따라가지 않는다. 외부 명령은 execvp()로 직접 실행하며 system()/popen()을 사용하지 않아 문자열 주입으로 인한 추가 쉘 해석을 피했다. 네트워크 서버는 기본적으로 127.0.0.1에만 바인딩하고, 외부 주소는 토큰 인증을 요구한다. MIT 라이선스는 자유로운 수정·배포를 허용한다.</p>
 <h2>3.5 표준성과 이식성</h2>
@@ -907,7 +1005,7 @@ if (sig == (SIGTRAP | 0x80)) {
 </tbody></table>
 <p>이 밖에 스크립트 지원을 위해 test/[(-e, -f, -d, -z, -n, 문자열/수 비교), read [-r], shift, source/., history를 내장 명령으로 추가했다. test/[는 시스템 콜과 문자열 비교만으로 구현했고, read는 fgets()로 한 줄을 읽어 여러 변수에 나눠 저장하며, source는 파일을 읽어 현재 쉘 상태에서 script_execute()를 호출한다.</p>
 <h2>4.6 테스트 설계와 자동화</h2>
-<p>tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교한다. tests/test_ext.sh는 37개 확장 기능을, tests/test_net.sh는 인증·원격 파이프/재지향·동시 접속·타임아웃을 25개 항목으로 확인한다. tests/test_script.sh는 명령 치환·제어문·함수·스크립트 파일·오류 처리를 56개 항목으로, tests/test_trace.sh는 ptrace 필터·요약·자식 추적을 32개 항목으로 검사한다. tests/test_dbg.sh는 ELF/PIE 브레이크포인트·step·finish·bt·SIGSEGV를 44개 항목으로 확인한다. tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 5개 항목으로 확인한다. tests/test_signals.py와 tests/test_lineedit.py는 pty.fork()로 가상 터미널을 열어 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 지속성을 확인한다. 전체는 make test로 실행한다.</p>
+<p>tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교한다. tests/test_ext.sh는 37개 확장 기능을, tests/test_net.sh는 인증·원격 파이프/재지향·동시 접속·타임아웃을 25개 항목으로 확인한다. tests/test_script.sh는 명령 치환·제어문·함수·스크립트 파일·오류 처리를 56개 항목으로, tests/test_trace.sh는 ptrace 필터·요약·자식 추적을 32개 항목으로 검사한다. tests/test_dbg.sh는 ELF/PIE 브레이크포인트·step·finish·bt·SIGSEGV를 44개 항목으로 확인한다. tests/test_rec.sh는 녹화·재생·HTML·-x 진단·오류 처리를 35개 항목으로 검사한다. tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 5개 항목으로 확인한다. tests/test_signals.py와 tests/test_lineedit.py는 pty.fork()로 가상 터미널을 열어 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 지속성을 확인한다. 전체는 make test로 실행한다.</p>
 <h2>4.7 협업과 형상 관리</h2>
 <p>기능별로 소스를 분리하고, 커밋은 “기능 구현 → 테스트 → 문서” 단위로 나누었다. 파일 시스템 명령은 cmd_fs.c, 텍스트 명령은 cmd_text.c, ls는 cmd_ls.c, 네트워크 기능은 cmd_net.c로 분리했다. 통합 전에는 make test를 실행해 회귀를 확인했다. 저장소에는 README, LICENSE, Makefile, 테스트, 보고서를 함께 두었다.</p>
 <div style="page-break-before: always;"></div>
@@ -1004,6 +1102,11 @@ if (sig == (SIGTRAP | 0x80)) {
 <td>dbg</td>
 <td>cmd_dbg.c</td>
 <td>ELF 심볼, 0xCC 브레이크포인트 복원/재설치, PIE bias, rbp 백트레이스</td>
+</tr>
+<tr>
+<td>rec/replay</td>
+<td>cmd_rec.c</td>
+<td>stdout/stderr 캡처, 길이 기반 레코드, 배속 재생, 단독 HTML</td>
 </tr>
 <tr>
 <td>pipestat</td>
@@ -1200,6 +1303,16 @@ if (sig == (SIGTRAP | 0x80)) {
 <td>SIGSEGV 지점 rip/백트레이스 자동 출력</td>
 </tr>
 <tr>
+<td>rec/replay</td>
+<td>완료</td>
+<td>명령·출력·stderr·상태·시간 녹화, -s 배속 재생</td>
+</tr>
+<tr>
+<td>rec export</td>
+<td>완료</td>
+<td>단독 HTML 타임라인, -x explain/trace 요약</td>
+</tr>
+<tr>
 <td>HMAC 인증</td>
 <td>완료</td>
 <td>nonce 기반 챌린지-응답, 토큰 미전송</td>
@@ -1233,7 +1346,7 @@ shell&gt; ls -l out.txt
 -rw-r--r-- 1 student student 6 2026-11-18 18:00 out.txt
 shell&gt; exit</pre>
 <h2>5.2 프로젝트 완성도 평가</h2>
-<p>기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 파일 입력 테스트 5개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/라인 에디터 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED; LINE EDITOR TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·디버거·라인 에디터 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.</p>
+<p>기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 녹화 테스트 35개, 파일 입력 테스트 5개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/라인 에디터 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED; LINE EDITOR TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·디버거·녹화·라인 에디터 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.</p>
 <table><thead><tr>
 <th>제외 기능</th>
 <th>이유</th>
@@ -1284,6 +1397,16 @@ shell&gt; exit</pre>
 <td>x86 명령 해석 범위가 방대해 제외</td>
 <td>disas 명령 없음 (regs/x/bt로 대체)</td>
 </tr>
+<tr>
+<td>rec 화면 제어</td>
+<td>출력은 명령 종료 후 표시</td>
+<td>dbg/편집기 같은 대화형 프로그램 녹화 부적합</td>
+</tr>
+<tr>
+<td>rec -x 부작용</td>
+<td>trace 요약을 위해 명령 재실행</td>
+<td>읽기 전용 명령에만 사용 권장</td>
+</tr>
 </tbody></table>
 <h2>5.3 일정 계획 평가</h2>
 <table><thead><tr>
@@ -1319,11 +1442,50 @@ shell&gt; exit</pre>
 <tr>
 <td>15주</td>
 <td>확장 기능, 보고서/GitHub 정리</td>
-<td>netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, dbg, 190여 개 추가 테스트</td>
+<td>netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, dbg, rec/replay, 200여 개 추가 테스트</td>
 <td>15주 내 완료</td>
 </tr>
 </tbody></table>
 <p>14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 보강했고, 15주차에 원격 쉘 확장과 네트워크 테스트를 추가했다.</p>
+<h3>5.3.1 주차별 기록과 증빙</h3>
+<table><thead><tr>
+<th>주차</th>
+<th>류동엽</th>
+<th>강동우</th>
+<th>증빙</th>
+</tr></thead><tbody>
+<tr>
+<td>11주</td>
+<td>교재 simplesh 분석, 요구사항 R1~R8, 파서/실행기 설계</td>
+<td>파일/텍스트 명령 요구사항 분석, 테스트 항목 설계</td>
+<td>요구사항 표, 초기 Makefile</td>
+</tr>
+<tr>
+<td>12주</td>
+<td>토큰화·확장·파이프·재지향 구현</td>
+<td>ls/mkdir/rmdir 초안과 테스트</td>
+<td>parser.c/execute.c, 기능 테스트</td>
+</tr>
+<tr>
+<td>13주</td>
+<td>프로세스 그룹·tcsetpgrp·SIGINT/SIGQUIT·VQUIT 매핑</td>
+<td>ln/cp/rm/mv 경계 조건</td>
+<td>PTY 시그널 테스트, cmd_fs.c</td>
+</tr>
+<tr>
+<td>14주</td>
+<td>11개 필수 명령 통합, 94개 기능 테스트, ASan</td>
+<td>cat/grep 옵션, 확장 테스트</td>
+<td>Passed: 94, tests/test_ext.sh</td>
+</tr>
+<tr>
+<td>15주</td>
+<td>netserv/netcli, HMAC, explain, pipestat, serve, line editor, script, trace, dbg, rec</td>
+<td>netcli/watcher, undo, watch, prompt, 문서/테스트</td>
+<td>네트워크 25, 스크립트 56, 추적 32, 디버거 44, 녹화 35</td>
+</tr>
+</tbody></table>
+<p>커밋 이력은 기능 구현, 테스트, 문서 갱신을 각각 분리해 남겼다. 예를 들어 원격 쉘/HMAC은 ac7da21, 라인 에디터·스크립트·trace는 b36c2be, 디버거는 050e8d5, 최종 문서 갱신은 별도 커밋으로 기록되어 5.4의 역할 표와 대응한다.</p>
 <h2>5.4 역할 수행 평가</h2>
 <table><thead><tr>
 <th>팀원</th>
@@ -1336,18 +1498,18 @@ shell&gt; exit</pre>
 <td>류동엽</td>
 <td>20223154</td>
 <td>gong000000</td>
-<td>쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, dbg, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir</td>
+<td>쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, dbg, rec/replay, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir</td>
 <td>50%</td>
 </tr>
 <tr>
 <td>강동우</td>
 <td>20223080</td>
 <td>pizza0420</td>
-<td>netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/디버거/PTY 테스트, 문서</td>
+<td>netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/디버거/녹화/PTY 테스트, 문서</td>
 <td>50%</td>
 </tr>
 </tbody></table>
-<p>류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·dbg·netserv, 강동우는 파일/텍스트 명령과 netcli·테스트·문서를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.</p>
+<p>류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·dbg·rec/replay·netserv, 강동우는 파일/텍스트 명령과 netcli·테스트·문서를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.</p>
 <h2>5.5 위험 처리</h2>
 <table><thead><tr>
 <th>위험</th>
@@ -1463,6 +1625,18 @@ shell&gt; exit</pre>
 <td>/proc/PID/maps에서 bias 계산, 심볼 값에 가산</td>
 <td>PIE 테스트 통과</td>
 </tr>
+<tr>
+<td>녹화 출력 지연</td>
+<td>긴 명령의 실시간 출력 불가</td>
+<td>명령 종료 후 tmpfile 내용을 터미널/레코드로 복사, 화면 제어형 프로그램 제외</td>
+<td>rec 테스트 통과</td>
+</tr>
+<tr>
+<td>-x 재실행</td>
+<td>파일 변경 명령의 부작용</td>
+<td>진단은 읽기 전용 명령에만 사용하도록 README/보고서에 명시</td>
+<td>HTML -x 테스트 통과</td>
+</tr>
 </tbody></table>
 <h2>5.6 GitHub 저장소와 라이선스</h2>
 <p>프로젝트는 https://github.com/gong000000/lab3 에 공개되어 있으며, 팀원 강동우(pizza0420)를 Collaborator(write 권한)로 등록했다. 팀원이 직접 commit/push할 수 있다. 저장소 루트에는 MIT LICENSE가 있어 누구나 자유롭게 사용·수정·재배포할 수 있다. README에는 빌드, 실행, 테스트, 지원 옵션, 알려진 제한을 정리했다.</p>
@@ -1498,6 +1672,14 @@ make
 #   (dbg) break main
 #   (dbg) run
 #   (dbg) regs / bt / x/4x $rsp / step / continue
+
+# 세션 녹화/재생
+./myshell
+#   shell&gt; rec start lab.rec
+#   shell&gt; cat a.txt | grep hello
+#   shell&gt; rec stop
+./myshell -c &#x27;replay lab.rec -s 0&#x27;
+./myshell -c &#x27;rec export lab.rec session.html&#x27;
 
 # 원격 쉘: 서버를 백그라운드로 실행하고 클라이언트로 명령 실행
 ./myshell -c &#x27;netserv -1 -p 9090 &amp; sleep 0.3; netcli -p 9090 127.0.0.1 echo hello; wait&#x27;
@@ -1632,6 +1814,11 @@ python3 tests/test_lineedit.py</pre>
 <td>44</td>
 </tr>
 <tr>
+<td>녹화</td>
+<td>rec/replay, 출력/상태/시간, HTML, -x 진단, 오류</td>
+<td>35</td>
+</tr>
+<tr>
 <td>시그널</td>
 <td>PTY에서 Ctrl-C/Ctrl-Z 및 확장 프롬프트</td>
 <td>6</td>
@@ -1651,7 +1838,7 @@ python3 tests/test_lineedit.py</pre>
 </tr></thead><tbody>
 <tr>
 <td>include/myshell.h</td>
-<td>304</td>
+<td>309</td>
 <td>공용 선언</td>
 </tr>
 <tr>
@@ -1715,6 +1902,11 @@ python3 tests/test_lineedit.py</pre>
 <td>미니 gdb: ELF/ptrace/브레이크포인트</td>
 </tr>
 <tr>
+<td>src/cmd_rec.c</td>
+<td>837</td>
+<td>세션 녹화/재생/HTML</td>
+</tr>
+<tr>
 <td>src/trace_syscalls.h</td>
 <td>393</td>
 <td>시스템 호출 이름 테이블</td>
@@ -1761,8 +1953,8 @@ python3 tests/test_lineedit.py</pre>
 </tr>
 <tr>
 <td>합계</td>
-<td>13,163</td>
-<td>직접 작성 12,770 + 생성 테이블 393. 주석·공백 제외 코드 10,880줄</td>
+<td>14,016</td>
+<td>직접 작성 13,623 + 생성 테이블 393. 주석·공백 제외 코드 11,627줄</td>
 </tr>
 </tbody></table>
 <h1>부록 D. 참고문헌</h1>

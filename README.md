@@ -3,7 +3,7 @@
 교재 357페이지의 `simplesh.c`를 확장한 POSIX 쉘입니다. Lab 3의 5개 요구사항과
 11개 내장 명령을 구현했고, TCP 기반 원격 쉘(`netserv`, `netcli`), UTF-8 라인
 에디터, 쉘 스크립트(`if`/`for`/`while`/함수/`$(...)`), ptrace 기반 `trace`,
-ELF/ptrace 기반 미니 디버거 `dbg`를 추가했습니다.
+ELF/ptrace 기반 미니 디버거 `dbg`, 세션 녹화/재생 `rec`/`replay`를 추가했습니다.
 
 - 저장소: <https://github.com/gong000000/lab3>
 - 라이선스: MIT
@@ -17,7 +17,7 @@ ELF/ptrace 기반 미니 디버거 `dbg`를 추가했습니다.
 | 시그널 | `SIGINT`(Ctrl-C), `SIGQUIT`(Ctrl-Z), 전경 작업만 종료 |
 | 재지향/파이프 | `<`, `>`, `>>`, `2>`, `2>>`, `2>&1`, `&>`, `&>>`, 다단 `\|` |
 | 내장 명령 | `ls`, `pwd`, `cd`, `mkdir`, `rmdir`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep` |
-| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[`, `read`, `shift`, `source`, `.`, `trace`, `history`, `dbg` |
+| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[`, `read`, `shift`, `source`, `.`, `trace`, `history`, `dbg`, `rec`, `replay` |
 | 네트워크 확장 | `netserv`(TCP 서버), `netcli`(클라이언트), HMAC 챌린지-응답 인증, 동시 접속, 타임아웃 |
 | 원격 관전 | `netcli -w`로 서버에서 실행되는 명령/상태를 읽기 전용으로 확인 |
 | 파이프 계측 | `pipestat 'cmd1 \| cmd2'`로 단계별 바이트·시간·종료 코드 출력 |
@@ -37,9 +37,15 @@ ELF/ptrace 기반 미니 디버거 `dbg`를 추가했습니다.
 | 스크립트 실행 | `myshell SCRIPT [ARGS...]`, `source FILE [ARGS...]`, `.` |
 | 시스템 호출 추적 | `trace [-c] [-f] [-e NAME,...] COMMAND` (x86_64 ptrace, 인자·반환값) |
 | 미니 디버거 | `dbg PROGRAM`: ELF 심볼, `break`/`run`/`step`/`continue`/`finish`, `regs`, `x/Nx`, `bt`, PIE, SIGSEGV 분석 |
+| 세션 녹화/재생 | `rec start [-x] FILE`, `rec stop`, `rec export FILE OUT.html`, `replay FILE [-s SPEED]` |
 
 Ctrl-Z는 과제 명세에 맞춰 `SIGQUIT`에 매핑했습니다. 일반 리눅스의 `SIGTSTP`와
 다르며, 쉘 종료 시 터미널 설정을 복구합니다.
+
+확장 기능은 단순한 기능 모음이 아니라 **“시스템 프로그래밍 학습용 투명 쉘”**이라는
+컨셉으로 묶었습니다. `explain`은 파서를, `trace`는 시스템 호출을, `dbg`는 ELF와
+ptrace를, `pipestat`은 파이프 단계를, `rec`/`replay`는 세션 전체를 들여다보게
+합니다. 즉 “명령을 실행하는 쉘”이 아니라 “실행 과정을 관찰·기록·재현하는 쉘”입니다.
 
 ## 2. 실행 방법
 
@@ -566,7 +572,45 @@ v=42
 - `bt`는 `-fno-omit-frame-pointer`로 컴파일된 프로그램의 `rbp` 체인을 따라갑니다.
 - SIGSEGV 같은 시그널에서 멈추면 `rip`와 백트레이스를 자동으로 보여 줍니다.
 
-#### (14) 테스트 실행
+#### (14) 세션 녹화·재생
+
+```text
+shell> rec start lab.rec
+recording to lab.rec
+shell> cat a.txt | grep hello > out.txt
+shell> echo done
+done
+shell> rec stop
+recording stopped: lab.rec (4 commands)
+shell> replay lab.rec -s 2
+=== replay: lab.rec (5 commands, speed 2.00x) ===
+$ cat a.txt | grep hello > out.txt
+[status=0, 3ms]
+$ echo done
+done
+[status=0, 0ms]
+$ rec stop
+recording stopped: lab.rec (4 commands)
+[status=0, 0ms]
+```
+
+녹화 파일에는 명령, stdout, stderr, 종료 코드, 소요 시간이 저장됩니다.
+`rec export lab.rec out.html`을 실행하면 서버 없이 열리는 단독 HTML
+타임라인을 만들 수 있습니다.
+
+```text
+shell> rec start -x lab.rec
+shell> cat a.txt | grep hello
+shell> rec stop
+shell> rec export lab.rec out.html
+```
+
+`-x`는 명령마다 `explain` 도식과 `trace -c` 요약도 HTML에 함께 넣습니다.
+`-x`는 진단을 위해 명령을 한 번 더 실행하므로, 부작용이 없는 읽기 명령에
+사용하는 것이 안전합니다. 녹화 중 출력은 명령이 끝난 뒤에 표시됩니다.
+`dbg`처럼 화면을 직접 제어하는 대화형 프로그램은 녹화하지 않는 것을 권장합니다.
+
+#### (15) 테스트 실행
 
 ```bash
 make test
@@ -593,6 +637,8 @@ Trace tests passed: 32
 ...
 Debugger tests passed: 44
 ...
+Recording tests passed: 35
+...
 SHA-256/HMAC tests passed
 ...
 SIGNAL TEST PASSED
@@ -609,6 +655,7 @@ LINE EDITOR TEST PASSED
 - `tests/test_script.sh`: 56개 스크립트 테스트
 - `tests/test_trace.sh`: 32개 ptrace 추적 테스트
 - `tests/test_dbg.sh`: 44개 미니 디버거 테스트 (ELF/PIE/브레이크포인트/백트레이스/SIGSEGV)
+- `tests/test_rec.sh`: 35개 녹화/재생/HTML 내보내기 테스트
 - `tests/test_sha256.c`: SHA-256/HMAC 벡터 테스트
 - `tests/test_signals.py`: PTY 시그널/프롬프트 테스트
 - `tests/test_lineedit.py`: PTY 라인 에디터/히스토리/한글 테스트
@@ -642,6 +689,7 @@ LINE EDITOR TEST PASSED
 | `23_script_file.png` | 스크립트 파일/위치 매개변수 | `./myshell demo.sh alice bob` |
 | `24_trace.png` | ptrace 추적/요약 | `trace -e write /bin/echo hi`, `trace -c -e openat /bin/cat /etc/hostname` |
 | `25_dbg.png` | 미니 gdb | `dbg ./a.out`, `break main`, `run`, `bt`, `x/4x $rsp`, `step`, `continue` |
+| `26_rec.png` | 세션 녹화/HTML 타임라인 | `rec start lab.rec`, 명령 실행, `rec stop`, `rec export lab.rec out.html` |
 
 캡처 팁:
 
@@ -685,6 +733,7 @@ LINE EDITOR TEST PASSED
 │   ├── cmd_text.c         cat, grep
 │   ├── cmd_trace.c        ptrace 기반 시스템 호출 추적
 │   ├── cmd_dbg.c          ELF 파싱·ptrace 미니 디버거
+│   ├── cmd_rec.c          세션 녹화·재생·HTML 타임라인
 │   ├── trace_syscalls.h   x86_64 시스템 호출 이름 테이블 (생성 파일)
 │   ├── cmd_net.c          netserv, netcli, HMAC, watcher
 │   ├── cmd_pipestat.c     파이프 계측
@@ -702,6 +751,7 @@ LINE EDITOR TEST PASSED
 │   ├── test_script.sh
 │   ├── test_trace.sh
 │   ├── test_dbg.sh
+│   ├── test_rec.sh
 │   ├── test_sha256.c
 │   ├── test_signals.py
 │   ├── test_lineedit.py
@@ -745,6 +795,8 @@ LINE EDITOR TEST PASSED
 | `source` / `.` | `source FILE [ARGS...]` |
 | `trace` | `-c`, `-f`, `-e NAME[,NAME...]`, `-e trace=NAME` |
 | `dbg` | `PROGRAM [ARGS...]`; 내부 명령 `break`, `run`, `continue`, `step`, `finish`, `bt`, `regs`, `x/Nx`, `info break`, `delete`, `quit` |
+| `rec` | `start [-x] FILE`, `stop`, `status`, `export FILE HTML` |
+| `replay` | `replay FILE [-s SPEED]` (`-x`로 진단 블록 표시) |
 
 ## 5. 제약
 
@@ -763,13 +815,50 @@ LINE EDITOR TEST PASSED
 - `dbg`는 x86_64 Linux 전용이며, ELF 심볼과 프레임 포인터 기반 백트레이스를 사용합니다.
   `-fno-omit-frame-pointer` 없이 최적화된 프로그램은 `bt`가 부정확할 수 있고,
   역어셈블(`disas`)은 지원하지 않습니다.
+- `rec`는 전경 명령의 출력을 명령 종료 후 기록합니다. `dbg` 같은 화면 제어형
+  프로그램은 녹화에 적합하지 않으며, `-x` 진단은 명령을 한 번 더 실행합니다.
+
+### 5.1 소스 규모 산정과 경제성
+
+지침의 경제성 항목은 “1,000줄 이상, 10,000줄 이하를 원칙”으로 되어 있습니다.
+산정 기준을 명시하면 다음과 같습니다.
+
+| 항목 | 줄 수 |
+|---|---:|
+| `include/myshell.h` + `src/*.c` | 13,623 |
+| 빈 줄 | 1,532 |
+| 주석 | 464 |
+| 주석·빈 줄 제외 코드 | 11,627 |
+| 생성된 `src/trace_syscalls.h` | 393 |
+| 테스트 코드(별도, 위 수치 제외) | 1,827 |
+
+코드 기준 11,627줄로 원칙 상한을 약 16% 초과합니다. 이는 필수 요구사항 1~5와
+11개 내장 명령을 유지한 채, 라인 에디터·스크립트·계측·추적·디버거·녹화를
+하나의 “투명 쉘”로 결합했기 때문입니다. 파일을 기능별로 분리하고 외부
+라이브러리 없이 구현해 결합도와 빌드 비용을 낮췄으며, 테스트 1,827줄은
+별도로 계산했습니다. `serve`, `watch`, `pipestat`은 제거 후보로 검토했지만
+기존 기능과 시연 자료를 보존하기 위해 유지했고, 엄격한 상한이 필요하면
+다음 단계에서 팀 합의 후 별도 모듈로 분리·제외할 수 있습니다.
 
 ## 6. 팀 역할
 
 | 팀원 | 학번 | GitHub | 담당 |
 |---|---|---|---|
-| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), `explain`, `netserv`, HMAC, `serve`, `pwd`, `cd`, `ls`, `mkdir`, `rmdir` |
+| 류동엽 | 20223154 | [@gong000000](https://github.com/gong000000) | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), `explain`, `netserv`, HMAC, `serve`, `pwd`, `cd`, `ls`, `mkdir`, `rmdir`, `rec`/`replay` |
 | 강동우 | 20223080 | [@pizza0420](https://github.com/pizza0420) | `netcli`/watcher, `pipestat`, `undo`/휴지통, `watch`, `prompt`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep`, 테스트/문서 |
+
+### 6.1 주차별 기록과 커밋 증빙
+
+| 주차 | 류동엽 | 강동우 | 증빙 |
+|---|---|---|---|
+| 11주 | simplesh 분석, 요구사항/파서·실행기 설계 | 파일/텍스트 명령 요구사항, 테스트 항목 | 요구사항 표, Makefile |
+| 12주 | 토큰화·확장·파이프·재지향 | ls/mkdir/rmdir 초안, 테스트 | parser.c, execute.c |
+| 13주 | 프로세스 그룹, tcsetpgrp, SIGINT/SIGQUIT | ln/cp/rm/mv 경계 조건 | PTY 시그널 테스트 |
+| 14주 | 11개 필수 명령 통합, 94개 테스트, ASan | cat/grep 옵션, 확장 테스트 | `Passed: 94` |
+| 15주 | netserv/HMAC, explain, pipestat, serve, 라인 에디터, 스크립트, trace, dbg, rec | netcli/watcher, undo, watch, prompt, 테스트/문서 | 네트워크 25, 스크립트 56, 추적 32, 디버거 44, 녹화 35 |
+
+최근 커밋: `ac7da21` (원격 쉘/HMAC), `b36c2be` (라인 에디터·스크립트·trace),
+`050e8d5` (미니 디버거). 이후 녹화 기능과 최종 문서를 별도 커밋으로 추가했다.
 
 ## 7. 보고서 재생성
 

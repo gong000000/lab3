@@ -67,6 +67,7 @@ BLOCKS: list[tuple] = [
         "스크립트 파일 실행을 구현한다.",
         "x86_64 ptrace로 시스템 호출을 추적하는 trace 명령을 구현한다.",
         "ELF 심볼과 ptrace를 이용해 break/step/bt를 제공하는 미니 디버거 dbg를 구현한다.",
+        "세션의 명령·출력·상태·시간을 기록하고 재생/HTML로 내보내는 rec/replay를 구현한다.",
         "자동화된 기능 테스트, 네트워크 테스트, PTY 시그널 테스트로 안정성을 검증한다.",
         "MIT 라이선스로 GitHub에 공개한다.",
     ]),
@@ -87,6 +88,7 @@ BLOCKS: list[tuple] = [
          ["스크립트 언어", "$(...), if/elif/else/fi, for, while/until, break/continue, 함수, return, 위치 매개변수"],
          ["시스템 호출 추적", "trace -c/-f/-e, x86_64 ptrace, 인자·반환값·호출 요약"],
          ["미니 디버거", "dbg: ELF .symtab/.dynsym, 0xCC 브레이크포인트, regs/x/bt, PIE 주소 보정, SIGSEGV 분석"],
+         ["세션 녹화/재생", "rec start/stop/export, replay -s, 명령·stdout/stderr·상태·시간 기록, -x explain/trace"],
          ["문서/배포", "README, MIT LICENSE, 결과보고서(HWP/PDF), 자동 테스트"],
      ]),
 
@@ -104,26 +106,27 @@ BLOCKS: list[tuple] = [
      ]),
 
     ("h2", "1.5 결과 요약"),
-    ("p", "최종 프로그램은 직접 작성한 헤더·C 소스 12,770줄(주석·공백 제외 "
-          "10,880줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 "
-          "내장 명령과 18개 보조 내장 명령, TCP 원격 쉘, "
-          "UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기, 미니 디버거를 제공한다. 기능 테스트 "
+    ("p", "최종 프로그램은 직접 작성한 헤더·C 소스 13,623줄(주석·공백 제외 "
+          "11,627줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 "
+          "내장 명령과 20개 보조 내장 명령, TCP 원격 쉘, "
+          "UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기, 미니 디버거, 세션 녹화기를 제공한다. 기능 테스트 "
           "94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 5개, "
-          "스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개와 PTY 시그널/라인 에디터 테스트를 "
+          "스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 녹화 테스트 35개와 PTY 시그널/라인 에디터 테스트를 "
           "통과했고, ASan/UBSan 빌드에서도 새 기능 테스트를 통과했다. "
           "저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다."),
     ("table",
      ["항목", "결과"],
      [
-         ["소스 규모", "직접 작성 12,770줄 + 생성 테이블 393줄, 주석·공백 제외 10,880줄 (지침 상한 소폭 초과)"],
+         ["소스 규모", "직접 작성 13,623줄 + 생성 테이블 393줄, 주석·공백 제외 11,627줄 (지침 상한 약 16% 초과)"],
          ["필수 내장 명령", "ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개)"],
-         ["보조 내장 명령", "echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history, dbg (18개)"],
+         ["보조 내장 명령", "echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history, dbg, rec, replay (20개)"],
          ["기능 테스트", "94 / 94 통과"],
          ["확장 테스트", "37 / 37 통과 (explain·&&/||·glob·undo·serve·watch)"],
          ["네트워크 테스트", "25 / 25 통과 (HMAC·watcher·동시 접속·타임아웃·원격 파이프)"],
          ["스크립트 테스트", "56 / 56 통과 (치환·제어문·함수·스크립트 파일·오류)"],
          ["추적 테스트", "32 / 32 통과 (필터·요약·자식 추적·오류)"],
          ["디버거 테스트", "44 / 44 통과 (ELF/PIE·브레이크포인트·step·bt·SIGSEGV)"],
+         ["녹화 테스트", "35 / 35 통과 (rec/replay·출력 캡처·HTML·-x 진단)"],
          ["계측 테스트", "pipestat 단계별 바이트/시간/종료 코드, SHA-256/HMAC 벡터"],
          ["터미널 테스트", "PTY에서 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 확인"],
          ["문서/배포", "README, MIT LICENSE, HWP/PDF 보고서, 테스트 스크립트"],
@@ -214,7 +217,7 @@ BLOCKS: list[tuple] = [
     ("table",
      ["파일", "역할", "줄 수"],
      [
-         ["include/myshell.h", "공용 상수, 구조체, 함수 원형", "304"],
+         ["include/myshell.h", "공용 상수, 구조체, 함수 원형", "309"],
          ["src/main.c", "REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화", "519"],
          ["src/parser.c", "토큰화, 따옴표/변수/$(...) 확장, &&/||/glob, 파이프라인/재지향 문법", "958"],
          ["src/execute.c", "fork/exec, 파이프, dup2, 전경/백그라운드 대기, 명령 치환 캡처", "488"],
@@ -227,6 +230,7 @@ BLOCKS: list[tuple] = [
          ["src/cmd_text.c", "cat, grep (POSIX regex)", "469"],
          ["src/cmd_trace.c", "ptrace 시스템 호출 추적, 필터/요약/자식 추적", "573"],
          ["src/cmd_dbg.c", "ELF 심볼, 0xCC 브레이크포인트, 레지스터/메모리/백트레이스", "1263"],
+         ["src/cmd_rec.c", "세션 녹화/재생, 출력 캡처, 단독 HTML 타임라인", "837"],
          ["src/trace_syscalls.h", "x86_64 시스템 호출 이름 테이블 (생성 파일)", "393"],
          ["src/cmd_net.c", "TCP 원격 쉘 서버/클라이언트, HMAC·watcher·타임아웃", "1139"],
          ["src/cmd_explain.c", "파서 결과 ASCII 시각화", "111"],
@@ -261,6 +265,10 @@ BLOCKS: list[tuple] = [
           "디버거의 ELF 심볼, PIE 로드 기준, 브레이크포인트/정지 상태"],
          ["dbg_bp_t", "addr, orig_word, orig_byte, inserted, temporary",
           "0xCC 브레이크포인트와 복원용 원본 바이트"],
+         ["rec_item_t", "cmd, out, err, diag, status, ms",
+          "녹화된 명령 하나의 출력·진단·종료 상태·소요 시간"],
+         ["rec_state_t", "active, fp, path, explain, capturing",
+          "녹화 세션의 파일/옵션/캡처 상태"],
          ["filter_t / summary_t", "names[], count / name, count",
           "trace의 -e 필터와 -c 호출 횟수 요약"],
          ["net_buf_t", "data, len, truncated",
@@ -526,6 +534,34 @@ if (sig == (SIGTRAP | 0x80)) {
 +bt: ret = PEEKDATA(rbp + 8); rbp = PEEKDATA(rbp)
 +"""),
 
+    ("h3", "2.5.12 세션 녹화·재생 rec/replay"),
+    ("p", "rec는 REPL에서 다음 명령을 실행할 때 stdout/stderr를 임시 파일로 "
+          "돌리고, 명령이 끝난 뒤 원래 터미널로 복사하면서 같은 내용을 녹화 "
+          "파일에 길이 기반으로 기록한다. 이 방식은 cd·변수·함수 같은 쉘 상태를 "
+          "그대로 유지하면서도 출력과 종료 코드를 함께 남길 수 있다. 출력은 "
+          "명령이 끝난 뒤 표시되므로 화면을 직접 제어하는 dbg/편집기에는 적합하지 "
+          "않다."),
+    ("table",
+     ["파일 블록", "내용"],
+     [
+         ["C", "명령 문자열"],
+         ["O / E", "stdout / stderr 바이트"],
+         ["S / T", "종료 코드 / 소요 밀리초"],
+         ["X", "-x일 때 explain 도식 + trace -c 요약"],
+     ]),
+    ("p", "replay는 녹화된 출력과 상태를 다시 표시하고, -s 배속으로 명령 간 "
+          "지연을 조절한다. 명령을 다시 실행하지 않으므로 파일 변경 같은 부작용이 "
+          "없고, 결과가 결정적이다. rec export는 같은 레코드를 단독 HTML로 "
+          "변환해 서버 없이 열 수 있게 한다. -x의 trace 요약은 진단을 위해 "
+          "명령을 한 번 더 실행하므로 읽기 전용 명령에만 사용하도록 안내한다."),
+    ("code", """/* cmd_rec.c: 출력 캡처와 기록 (요약) */
++stdout/stderr를 tmpfile()로 dup2
++shell_execute_line() 실행 (cd/변수/함수는 부모에서 유지)
++fflush 후 원래 fd 복원, tmpfile 내용을 터미널과 레코드에 기록
++레코드: C/O/E/S/T/X 길이 기반 블록
++replay: 명령을 재실행하지 않고 출력/상태/시간을 재생
++"""),
+
     ("h2", "2.6 설계 구성 요소와의 대응"),
     ("table",
      ["설계 구성 요소", "본 프로젝트에서의 수행 내용"],
@@ -533,7 +569,7 @@ if (sig == (SIGTRAP | 0x80)) {
          ["목표/기준 설정", "교재 357쪽 simplesh.c를 기준으로 5개 필수 요구사항과 11개 내장 명령, 원격 쉘 확장을 목표로 설정"],
          ["분석", "요구사항을 R1~R6으로 분해하고, 프로세스/시그널/파일 시스템/텍스트/네트워크로 나누어 분석"],
          ["제작", "parser, executor, job manager, builtin, cmd_* 모듈로 구현. Makefile로 재현 가능한 빌드 제공"],
-         ["시험", "94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 56개 스크립트 + 32개 추적 + 44개 디버거 테스트 + PTY 시그널/라인 에디터 테스트"],
+         ["시험", "94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 56개 스크립트 + 32개 추적 + 44개 디버거 + 35개 녹화 테스트 + PTY 시그널/라인 에디터 테스트"],
      ]),
 
     ("pagebreak",),
@@ -542,11 +578,11 @@ if (sig == (SIGTRAP | 0x80)) {
      ["제한 요소", "설계 기준", "본 프로젝트의 대응"],
      [
          ["경제성", "3~4인이 한 학기에 구현 가능한 1,000~10,000줄",
-          "직접 작성 12,770줄(주석·공백 제외 10,880줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화"],
+          "직접 작성 13,623줄(주석·공백 제외 11,627줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화"],
          ["안정성", "외부 환경 변화에도 지속적으로 동작",
-          "오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 293개 자동 테스트, ASan/UBSan 검증"],
+          "오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 328개 자동 테스트, ASan/UBSan 검증"],
          ["생산성", "모든 기능이 동작하고 응용 가능",
-          "11개 필수 명령 + 18개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace/dbg, README/보고서 제공"],
+          "11개 필수 명령 + 20개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace/dbg, README/보고서 제공"],
          ["윤리성/사회적 영향", "안전하고 책임 있는 소프트웨어",
           "rm의 /, ., .. 보호, system()/popen() 미사용, MIT 라이선스로 투명한 재사용 허용"],
          ["표준성", "POSIX/Linux 표준 인터페이스 사용",
@@ -556,11 +592,30 @@ if (sig == (SIGTRAP | 0x80)) {
      ]),
 
     ("h2", "3.1 경제성"),
-    ("p", "전체 소스는 직접 작성분 12,770줄(주석·공백 제외 10,880줄)과 생성 테이블 "
-          "393줄로 구성되어 설계 지침의 1,000~10,000줄 범위를 참고했으며, 최종 디버거 확장으로 상한을 소폭 초과한다. 명령별 "
-          "파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 "
-          "병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 "
-          "구축 비용도 작다."),
+    ("p", "지침의 경제성 항목은 “적어도 1,000라인은 넘고 10,000라인은 넘지 않는 "
+          "것을 원칙”으로 한다. 산정 기준을 빈 줄·주석·생성 파일·테스트로 나누면 "
+          "다음과 같다."),
+    ("table",
+     ["항목", "줄 수", "설명"],
+     [
+         ["include/myshell.h + src/*.c", "13,623", "직접 작성한 헤더와 C 소스"],
+         ["빈 줄", "1,532", "가독성을 위한 공백"],
+         ["주석", "464", "구현 근거와 인터페이스 설명"],
+         ["주석·빈 줄 제외 코드", "11,627", "실제 C 문장 기준"],
+         ["src/trace_syscalls.h", "393", "unistd_64.h에서 생성한 이름 테이블"],
+         ["tests/*", "1,827", "테스트 코드(위 소스 수치와 별도)"],
+     ]),
+    ("p", "코드 기준 11,627줄로 원칙 상한을 약 16% 초과한다. 이는 필수 요구사항 "
+          "1~5와 11개 내장 명령을 훼손하지 않은 채, 라인 에디터·스크립트·파이프 "
+          "계측·시스템 호출 추적·ELF 디버거·세션 녹화를 하나의 “투명 쉘”로 "
+          "결합했기 때문이다. 기능을 단순히 많이 넣은 것이 아니라, 모두 같은 "
+          "파서/실행기/작업 제어 위에서 동작하도록 모듈화했다."),
+    ("bullets", [
+        "11개 필수 명령과 요구사항 1~5는 별도 모듈(cmd_*.c)로 유지해 원래 과제의 채점 기준을 보존했다.",
+        "테스트 1,827줄은 제품 소스와 분리해 계산했다.",
+        "serve(544줄), watch(125줄), pipestat(330줄)은 제거 후보로 검토했으나 기존 기능과 시연 자료를 보존하기 위해 유지했다. 이들을 제거해도 10,000줄 이하로 내려가지 않으므로, 삭제보다 산정 근거와 범위 결정을 보고서에 명시하는 쪽을 택했다.",
+        "외부 라이브러리 없이 libc/POSIX만 사용해 의존성과 빌드 비용을 최소화했다.",
+    ]),
 
     ("h2", "3.2 안정성"),
     ("p", "모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 "
@@ -573,9 +628,10 @@ if (sig == (SIGTRAP | 0x80)) {
     ("p", "ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q "
           "등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 "
           "호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. "
-          "라인 에디터와 스크립트, trace, dbg까지 같은 바이너리에 포함되어 별도 도구 "
+          "라인 에디터와 스크립트, trace, dbg, rec까지 같은 바이너리에 포함되어 별도 도구 "
           "없이 시스템 프로그래밍 실습을 할 수 있으며, 테스트는 make test로 "
-          "재현한다."),
+          "재현한다. rec로 실습 과정을 녹화한 뒤 HTML로 제출하면 채점자가 명령 "
+          "흐름과 출력을 서버 없이 재현·검증할 수 있다."),
 
     ("h2", "3.4 윤리성과 사회적 영향"),
     ("p", "쉘은 파일 삭제·복사·이동 권한을 가지므로 안전장치가 필요하다. rm은 "
@@ -678,6 +734,7 @@ if (sig == (SIGTRAP | 0x80)) {
           "스크립트 파일·오류 처리를 56개 항목으로, tests/test_trace.sh는 ptrace "
           "필터·요약·자식 추적을 32개 항목으로 검사한다. tests/test_dbg.sh는 ELF/PIE "
           "브레이크포인트·step·finish·bt·SIGSEGV를 44개 항목으로 확인한다. "
+          "tests/test_rec.sh는 녹화·재생·HTML·-x 진단·오류 처리를 35개 항목으로 검사한다. "
           "tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 "
           "5개 항목으로 확인한다. tests/test_signals.py와 tests/test_lineedit.py는 "
           "pty.fork()로 가상 터미널을 열어 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, "
@@ -727,6 +784,7 @@ if (sig == (SIGTRAP | 0x80)) {
          ["$(...)", "parser.c, execute.c", "균형 괄호 탐색, fork/pipe로 stdout 캡처, 중첩 치환"],
          ["trace", "cmd_trace.c, trace_syscalls.h", "PTRACE_SYSCALL 진입/종료, -e 필터, -c 요약, -f 자식 추적"],
          ["dbg", "cmd_dbg.c", "ELF 심볼, 0xCC 브레이크포인트 복원/재설치, PIE bias, rbp 백트레이스"],
+         ["rec/replay", "cmd_rec.c", "stdout/stderr 캡처, 길이 기반 레코드, 배속 재생, 단독 HTML"],
          ["pipestat", "cmd_pipestat.c", "relay 프로세스로 단계별 바이트/시간/종료 코드 수집"],
          ["HMAC 인증", "cmd_net.c, sha256.c", "nonce + HMAC-SHA256 챌린지-응답"],
          ["netcli -w", "cmd_net.c", "이벤트 로그를 tail해 원격 실행을 읽기 전용 관전"],
@@ -772,6 +830,8 @@ if (sig == (SIGTRAP | 0x80)) {
          ["dbg 제어", "완료", "break/run/continue/step/finish, 0xCC 복원·재설치"],
          ["dbg 조사", "완료", "regs, x/Nx, info break, delete, rbp 기반 bt"],
          ["dbg 시그널", "완료", "SIGSEGV 지점 rip/백트레이스 자동 출력"],
+         ["rec/replay", "완료", "명령·출력·stderr·상태·시간 녹화, -s 배속 재생"],
+         ["rec export", "완료", "단독 HTML 타임라인, -x explain/trace 요약"],
          ["HMAC 인증", "완료", "nonce 기반 챌린지-응답, 토큰 미전송"],
          ["netcli -w", "완료", "원격 명령/상태 읽기 전용 관전"],
      ]),
@@ -800,11 +860,12 @@ shell> exit"""),
 
     ("h2", "5.2 프로젝트 완성도 평가"),
     ("p", "기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 스크립트 "
-          "테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 파일 입력 테스트 5개, "
-          "SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/라인 에디터 테스트도 통과했다"
+          "테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 녹화 테스트 35개, "
+          "파일 입력 테스트 5개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/"
+          "라인 에디터 테스트도 통과했다"
           "(Passed: 94, Failed: 0; SIGNAL TEST PASSED; LINE EDITOR TEST PASSED). "
-          "ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·디버거·라인 에디터 테스트를 "
-          "통과했다. 다음 기능은 설계 범위에서 제외했다."),
+          "ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·디버거·녹화·라인 에디터 "
+          "테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다."),
     ("table",
      ["제외 기능", "이유", "영향"],
      [
@@ -817,6 +878,8 @@ shell> exit"""),
          ["break/continue 단계", "한 단계만 지원", "중첩 루프에서 break 2 불가"],
          ["루프/if 파이프", "done | cmd, fi | cmd 미지원", "루프 결과를 파이프로 직접 전달 불가"],
          ["dbg 역어셈블", "x86 명령 해석 범위가 방대해 제외", "disas 명령 없음 (regs/x/bt로 대체)"],
+         ["rec 화면 제어", "출력은 명령 종료 후 표시", "dbg/편집기 같은 대화형 프로그램 녹화 부적합"],
+         ["rec -x 부작용", "trace 요약을 위해 명령 재실행", "읽기 전용 명령에만 사용 권장"],
      ]),
 
     ("h2", "5.3 일정 계획 평가"),
@@ -827,23 +890,37 @@ shell> exit"""),
          ["12주", "파서/실행기 구현", "따옴표·변수 확장, 파이프·재지향, 내장 명령 디스패치", "계획대로"],
          ["13주", "시그널/작업 제어", "프로세스 그룹, tcsetpgrp, VQUIT 매핑, jobs/wait", "계획대로"],
          ["14주", "11개 명령 구현 및 통합", "파일/텍스트 명령, 94개 기능 테스트, ASan 검증", "테스트 보강으로 일부 지연"],
-         ["15주", "확장 기능, 보고서/GitHub 정리", "netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, dbg, 190여 개 추가 테스트", "15주 내 완료"],
+         ["15주", "확장 기능, 보고서/GitHub 정리", "netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, dbg, rec/replay, 200여 개 추가 테스트", "15주 내 완료"],
      ]),
     ("p", "14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 보강했고, 15주차에 "
           "원격 쉘 확장과 네트워크 테스트를 추가했다."),
+    ("h3", "5.3.1 주차별 기록과 증빙"),
+    ("table",
+     ["주차", "류동엽", "강동우", "증빙"],
+     [
+         ["11주", "교재 simplesh 분석, 요구사항 R1~R8, 파서/실행기 설계", "파일/텍스트 명령 요구사항 분석, 테스트 항목 설계", "요구사항 표, 초기 Makefile"],
+         ["12주", "토큰화·확장·파이프·재지향 구현", "ls/mkdir/rmdir 초안과 테스트", "parser.c/execute.c, 기능 테스트"],
+         ["13주", "프로세스 그룹·tcsetpgrp·SIGINT/SIGQUIT·VQUIT 매핑", "ln/cp/rm/mv 경계 조건", "PTY 시그널 테스트, cmd_fs.c"],
+         ["14주", "11개 필수 명령 통합, 94개 기능 테스트, ASan", "cat/grep 옵션, 확장 테스트", "Passed: 94, tests/test_ext.sh"],
+         ["15주", "netserv/netcli, HMAC, explain, pipestat, serve, line editor, script, trace, dbg, rec", "netcli/watcher, undo, watch, prompt, 문서/테스트", "네트워크 25, 스크립트 56, 추적 32, 디버거 44, 녹화 35"],
+     ]),
+    ("p", "커밋 이력은 기능 구현, 테스트, 문서 갱신을 각각 분리해 남겼다. "
+          "예를 들어 원격 쉘/HMAC은 ac7da21, 라인 에디터·스크립트·trace는 b36c2be, "
+          "디버거는 050e8d5, 최종 문서 갱신은 별도 커밋으로 기록되어 5.4의 역할 "
+          "표와 대응한다."),
 
     ("h2", "5.4 역할 수행 평가"),
     ("table",
      ["팀원", "학번", "GitHub", "담당 업무", "기여도"],
      [
          ["류동엽", "20223154", "gong000000",
-          "쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, dbg, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir",
+          "쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, dbg, rec/replay, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir",
           "50%"],
          ["강동우", "20223080", "pizza0420",
-          "netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/디버거/PTY 테스트, 문서",
+          "netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/디버거/녹화/PTY 테스트, 문서",
           "50%"],
      ]),
-    ("p", "류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·dbg·netserv, 강동우는 "
+    ("p", "류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·dbg·rec/replay·netserv, 강동우는 "
           "파일/텍스트 명령과 netcli·테스트·문서를 담당했다. 명령 구현은 "
           "5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. "
           "통합 전 두 사람이 상대 모듈의 테스트를 실행했다."),
@@ -870,6 +947,8 @@ shell> exit"""),
          ["ptrace 차단", "trace 실행 불가", "PTRACE_TRACEME로 자기 자식만 추적, 실패 시 오류 메시지", "WSL2 추적 테스트 통과"],
          ["브레이크포인트 재설치", "0xCC가 남아 무한 정지", "원본 바이트 복원→SINGLESTEP→재설치 순서", "break/step/continue/finish 테스트 통과"],
          ["PIE 주소 불일치", "심볼 주소와 실제 주소 불일치", "/proc/PID/maps에서 bias 계산, 심볼 값에 가산", "PIE 테스트 통과"],
+         ["녹화 출력 지연", "긴 명령의 실시간 출력 불가", "명령 종료 후 tmpfile 내용을 터미널/레코드로 복사, 화면 제어형 프로그램 제외", "rec 테스트 통과"],
+         ["-x 재실행", "파일 변경 명령의 부작용", "진단은 읽기 전용 명령에만 사용하도록 README/보고서에 명시", "HTML -x 테스트 통과"],
      ]),
 
     ("h2", "5.6 GitHub 저장소와 라이선스"),
@@ -919,6 +998,14 @@ make
 #   (dbg) run
 #   (dbg) regs / bt / x/4x $rsp / step / continue
 
+# 세션 녹화/재생
+./myshell
+#   shell> rec start lab.rec
+#   shell> cat a.txt | grep hello
+#   shell> rec stop
+./myshell -c 'replay lab.rec -s 0'
+./myshell -c 'rec export lab.rec session.html'
+
 # 원격 쉘: 서버를 백그라운드로 실행하고 클라이언트로 명령 실행
 ./myshell -c 'netserv -1 -p 9090 & sleep 0.3; netcli -p 9090 127.0.0.1 echo hello; wait'
 
@@ -959,6 +1046,7 @@ python3 tests/test_lineedit.py"""),
          ["스크립트", "치환, if/elif/else, for, while/until, break/continue, 함수, source, 재지향, glob, 오류", "56"],
          ["추적", "시스템 호출 필터/요약/자식 추적/경로 문자열/오류", "32"],
          ["디버거", "ELF/PIE, break/run/step/finish, regs, x/Nx, bt, SIGSEGV, 오류", "44"],
+         ["녹화", "rec/replay, 출력/상태/시간, HTML, -x 진단, 오류", "35"],
          ["시그널", "PTY에서 Ctrl-C/Ctrl-Z 및 확장 프롬프트", "6"],
          ["라인 에디터", "한글 입력, 커서 이동, Tab, Ctrl-R, 히스토리 지속", "1 시나리오"],
      ]),
@@ -968,7 +1056,7 @@ python3 tests/test_lineedit.py"""),
     ("table",
      ["파일", "줄 수", "비고"],
      [
-         ["include/myshell.h", "304", "공용 선언"],
+         ["include/myshell.h", "309", "공용 선언"],
          ["src/main.c", "519", "REPL/시그널/터미널"],
          ["src/parser.c", "958", "토큰화/확장/문법"],
          ["src/execute.c", "488", "fork/pipe/redirection/wait"],
@@ -981,6 +1069,7 @@ python3 tests/test_lineedit.py"""),
          ["src/cmd_text.c", "469", "cat/grep"],
          ["src/cmd_trace.c", "573", "ptrace 추적"],
          ["src/cmd_dbg.c", "1263", "미니 gdb: ELF/ptrace/브레이크포인트"],
+         ["src/cmd_rec.c", "837", "세션 녹화/재생/HTML"],
          ["src/trace_syscalls.h", "393", "시스템 호출 이름 테이블"],
          ["src/cmd_net.c", "1139", "netserv/netcli/HMAC"],
          ["src/cmd_explain.c", "111", "explain"],
@@ -990,7 +1079,7 @@ python3 tests/test_lineedit.py"""),
          ["src/cmd_pipestat.c", "330", "pipestat"],
          ["src/sha256.c", "204", "SHA-256/HMAC"],
          ["src/util.c", "567", "공통 유틸"],
-         ["합계", "13,163", "직접 작성 12,770 + 생성 테이블 393. 주석·공백 제외 코드 10,880줄"],
+         ["합계", "14,016", "직접 작성 13,623 + 생성 테이블 393. 주석·공백 제외 코드 11,627줄"],
      ]),
 
     ("h1", "부록 D. 참고문헌"),

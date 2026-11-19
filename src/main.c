@@ -423,7 +423,10 @@ static int run_repl(shell_state_t *sh)
             struct timespec start, end;
 
             clock_gettime(CLOCK_MONOTONIC, &start);
-            shell_execute_line(command, sh);
+            if (rec_is_active())
+                (void)rec_run_and_record(command, sh);
+            else
+                shell_execute_line(command, sh);
             clock_gettime(CLOCK_MONOTONIC, &end);
             sh->last_duration = (double)(end.tv_sec - start.tv_sec) +
                                 (double)(end.tv_nsec - start.tv_nsec) / 1e9;
@@ -479,6 +482,7 @@ int main(int argc, char **argv)
         rc = sh.should_exit ? sh.exit_status : sh.last_status;
         job_cleanup(&sh);
         msh_functions_free(&sh);
+        rec_shutdown();
         history_free(&sh);
         restore_terminal();
         return rc;
@@ -499,6 +503,7 @@ int main(int argc, char **argv)
         rc = sh.should_exit ? sh.exit_status : sh.last_status;
         job_cleanup(&sh);
         msh_functions_free(&sh);
+        rec_shutdown();
         history_free(&sh);
         restore_terminal();
         return rc;
@@ -513,6 +518,7 @@ int main(int argc, char **argv)
     rc = run_repl(&sh);
     job_cleanup(&sh);
     msh_functions_free(&sh);
+    rec_shutdown();
     history_free(&sh);
     restore_terminal();
     return rc;

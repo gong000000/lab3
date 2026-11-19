@@ -192,6 +192,11 @@ int cmd_pipestat(int argc, char **argv, shell_state_t *sh);
 int cmd_history(int argc, char **argv, shell_state_t *sh);
 int cmd_trace(int argc, char **argv, shell_state_t *sh);
 int cmd_dbg(int argc, char **argv, shell_state_t *sh);
+int cmd_rec(int argc, char **argv, shell_state_t *sh);
+int cmd_replay(int argc, char **argv, shell_state_t *sh);
+int rec_is_active(void);
+int rec_run_and_record(const char *line, shell_state_t *sh);
+void rec_shutdown(void);
 const char *const *msh_builtin_names(int *count);
 
 /* lineedit.c */

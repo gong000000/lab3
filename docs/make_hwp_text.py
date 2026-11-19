@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -21,12 +22,13 @@ except ImportError:
 DOCS = Path(__file__).resolve().parent
 REPORT_MD = DOCS / "REPORT.md"
 HWP = DOCS / "REPORT.hwp"
-TMP = DOCS / "REPORT_text.hwp"
+TMP = Path(tempfile.gettempdir()) / "REPORT_text.hwp"
 CHUNK_LINES = 100
 
 
 def insert_lines(hwp, lines: list[str]) -> None:
     for start in range(0, len(lines), CHUNK_LINES):
+        print(f"insert {start}/{len(lines)}", flush=True)
         chunk = "\r\n".join(lines[start:start + CHUNK_LINES])
         if start + CHUNK_LINES < len(lines):
             chunk += "\r\n"
@@ -53,26 +55,25 @@ def main() -> None:
         sys.exit(f"missing {REPORT_MD}; run make_report.py first")
 
     lines = REPORT_MD.read_text(encoding="utf-8").splitlines()
+    print(f"{len(lines)} lines", flush=True)
     hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
+    print("dispatch ok", flush=True)
     try:
-        try:
-            hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
-        except Exception:
-            pass
         try:
             hwp.XHwpWindows.Item(0).Visible = False
         except Exception:
             pass
 
-        if HWP.exists():
-            hwp.Open(str(HWP), "HWP", "forceopen:true")
-        else:
-            hwp.HAction.Run("FileNew")
+        hwp.HAction.Run("FileNew")
+        print("new ok", flush=True)
         hwp.HAction.Run("SelectAll")
         hwp.HAction.Run("Delete")
+        print("delete ok", flush=True)
         insert_lines(hwp, lines)
+        print("insert done", flush=True)
         hwp.SaveAs(str(TMP), "HWP", "")
         pages = hwp.PageCount
+        print(f"saved {pages}", flush=True)
     finally:
         try:
             hwp.Quit()
