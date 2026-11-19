@@ -21,9 +21,7 @@
 #include <string.h>
 #include <unistd.h>
 
-/* ------------------------------------------------------------------ */
 /* Growable string                                                    */
-/* ------------------------------------------------------------------ */
 
 typedef struct {
     char *buf;
@@ -69,9 +67,7 @@ static void wb_putint(wordbuf_t *wb, long value)
     wb_puts(wb, buf);
 }
 
-/* ------------------------------------------------------------------ */
 /* Token list                                                         */
-/* ------------------------------------------------------------------ */
 
 typedef struct {
     token_t *items;
@@ -104,9 +100,7 @@ static void token_list_free(token_list_t *tl)
     tl->cap = 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* Operator recognition                                               */
-/* ------------------------------------------------------------------ */
 
 static int match_operator(const char *p, token_type_t *type, int *length)
 {
@@ -148,9 +142,7 @@ static int is_token_delim(char c)
            c == '|' || c == '&' || c == ';' || c == '<' || c == '>';
 }
 
-/* ------------------------------------------------------------------ */
 /* Expansion                                                          */
-/* ------------------------------------------------------------------ */
 
 static void wb_putvalue(wordbuf_t *wb, shell_state_t *sh, int index)
 {
@@ -567,9 +559,7 @@ static int tokenize(const char *line, token_list_t *tl, shell_state_t *sh,
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* Command building                                                   */
-/* ------------------------------------------------------------------ */
 
 static void command_add_arg_raw(command_t *cmd, char *arg)
 {
@@ -755,9 +745,7 @@ static char *build_pipeline_text(const pipeline_t *pl)
     return buf != NULL ? buf : msh_strdup("");
 }
 
-/* ------------------------------------------------------------------ */
 /* Public parser API                                                  */
-/* ------------------------------------------------------------------ */
 
 int parse_line(const char *line, shell_state_t *sh, command_list_t *list,
                char **error)
@@ -895,9 +883,7 @@ fail:
 
 /* Expand one word without globbing.  Used by assignments and for-loops,
  * where the result is a single string and not an argv entry. */
-/* ------------------------------------------------------------------ */
 /* Freeing                                                            */
-/* ------------------------------------------------------------------ */
 
 void free_command(command_t *cmd)
 {

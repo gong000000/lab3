@@ -90,7 +90,7 @@
 </tr>
 <tr>
 <td>보조 내장 명령</td>
-<td>echo, export, unset, jobs, wait, help, true, false, :, test, [</td>
+<td>echo, export, unset, jobs, wait, help, true, false, :</td>
 </tr>
 <tr>
 <td>관찰 도구</td>
@@ -141,14 +141,14 @@
 </tr>
 </tbody></table>
 <h2>1.5 결과 요약</h2>
-<p>최종 소스는 직접 작성 8,580줄, 생성 테이블 포함 8,717줄로 10,000줄 이하를 만족한다. 11개 필수 명령과 관찰 도구 5종(explain, pipestat, trace, dbg, inspect), 기록 도구(rec/replay)를 제공하며, 기능 94개·확장 21개·파일 입력 4개·추적 32개·디버거 44개·녹화 35개·조사 27개 테스트와 PTY 시그널 테스트를 통과했다.</p>
+<p>최종 소스는 직접 작성 8,543줄, 생성 테이블 포함 8,680줄로 10,000줄 이하를 만족한다. 11개 필수 명령과 관찰 도구 5종(explain, pipestat, trace, dbg, inspect), 기록 도구(rec/replay)를 제공하며, 기능 94개·확장 21개·파일 입력 4개·추적 32개·디버거 44개·녹화 35개·조사 27개 테스트와 PTY 시그널 테스트를 통과했다.</p>
 <table><thead><tr>
 <th>항목</th>
 <th>결과</th>
 </tr></thead><tbody>
 <tr>
 <td>소스 규모</td>
-<td>직접 작성 8,580줄, 생성 포함 8,717줄 (10,000줄 이하)</td>
+<td>직접 작성 8,543줄, 생성 포함 8,680줄 (10,000줄 이하)</td>
 </tr>
 <tr>
 <td>필수 내장 명령</td>
@@ -231,17 +231,17 @@
 <tr>
 <td>include/myshell.h</td>
 <td>공용 구조체와 함수 원형</td>
-<td>262</td>
+<td>240</td>
 </tr>
 <tr>
 <td>src/main.c</td>
 <td>REPL, 명령 분리, 시그널, 터미널</td>
-<td>419</td>
+<td>411</td>
 </tr>
 <tr>
 <td>src/parser.c</td>
 <td>토큰화, 확장, 문법 분석</td>
-<td>935</td>
+<td>921</td>
 </tr>
 <tr>
 <td>src/execute.c</td>
@@ -256,7 +256,7 @@
 <tr>
 <td>src/builtin.c</td>
 <td>내장 명령 디스패치</td>
-<td>625</td>
+<td>522</td>
 </tr>
 <tr>
 <td>src/cmd_ls.c</td>
@@ -266,7 +266,7 @@
 <tr>
 <td>src/cmd_fs.c</td>
 <td>mkdir/rmdir/ln/cp/rm/mv</td>
-<td>952</td>
+<td>938</td>
 </tr>
 <tr>
 <td>src/cmd_text.c</td>
@@ -286,22 +286,22 @@
 <tr>
 <td>src/cmd_trace.c</td>
 <td>ptrace 시스템 호출 추적</td>
-<td>573</td>
+<td>563</td>
 </tr>
 <tr>
 <td>src/cmd_dbg.c</td>
 <td>ELF/ptrace 미니 디버거</td>
-<td>1263</td>
+<td>1253</td>
 </tr>
 <tr>
 <td>src/cmd_inspect.c</td>
 <td>/proc 기반 프로세스 조사</td>
-<td>283</td>
+<td>276</td>
 </tr>
 <tr>
 <td>src/cmd_rec.c</td>
 <td>세션 녹화/재생/HTML</td>
-<td>837</td>
+<td>1002</td>
 </tr>
 <tr>
 <td>src/util.c</td>
@@ -315,7 +315,7 @@
 </tr>
 <tr>
 <td>합계</td>
-<td>직접 작성 8,580 + 생성 137 = 8,717</td>
+<td>직접 작성 8,543 + 생성 137 = 8,680</td>
 <td></td>
 </tr>
 </tbody></table>
@@ -377,7 +377,7 @@
 <h3>2.4.7 inspect</h3>
 <p>inspect는 /proc/PID/status, fd, maps, ns를 읽어 프로세스의 상태를 보여 준다. 쉘 자신의 pid/ppid/pgid/sid, uid/gid, cwd, umask, rlimit, 백그라운드 작업도 함께 출력한다. 시스템 프로그래밍에서 프로세스와 파일 디스크립터가 어떻게 표현되는지 직접 확인하는 도구이다.</p>
 <h3>2.4.8 rec/replay</h3>
-<p>rec는 REPL 명령 실행 시 stdout/stderr를 tmpfile()로 돌리고, 명령 종료 후 원래 터미널로 복사하면서 명령/출력/상태/시간을 길이 기반 레코드에 기록한다. replay는 명령을 재실행하지 않고 출력과 상태를 재생하며, rec export는 단독 HTML 타임라인을 만든다. -x는 explain과 trace -c 요약을 추가한다.</p>
+<p>rec는 전경 명령의 stdout/stderr를 relay 프로세스로 실시간 중계하면서 동시에 임시 파일에 기록한다. 백그라운드(&amp;) 명령은 지연 캡처 경로로 처리한다. replay는 명령을 재실행하지 않고 출력과 상태를 재생하며, rec export는 단독 HTML 타임라인을 만든다. -x는 explain과 trace -c 요약을 추가한다.</p>
 <pre>record: C/O/E/S/T/X (명령, stdout, stderr, 상태, ms, 진단)
 replay: 저장된 출력/상태/시간을 재표시 (부작용 없음)
 export: HTML + inline CSS, 서버 불필요</pre>
@@ -391,7 +391,7 @@ export: HTML + inline CSS, 서버 불필요</pre>
 <tr>
 <td>경제성</td>
 <td>1,000~10,000줄 원칙</td>
-<td>직접 작성 8,580줄, 생성 포함 8,717줄로 준수</td>
+<td>직접 작성 8,543줄, 생성 포함 8,680줄로 준수</td>
 </tr>
 <tr>
 <td>안정성</td>
@@ -422,19 +422,19 @@ export: HTML + inline CSS, 서버 불필요</pre>
 </tr></thead><tbody>
 <tr>
 <td>include/myshell.h + src/*.c</td>
-<td>8,580</td>
+<td>8,543</td>
 </tr>
 <tr>
 <td>빈 줄</td>
-<td>994</td>
+<td>997</td>
 </tr>
 <tr>
 <td>주석</td>
-<td>335</td>
+<td>204</td>
 </tr>
 <tr>
 <td>주석·빈 줄 제외 코드</td>
-<td>7,251</td>
+<td>7,342</td>
 </tr>
 <tr>
 <td>생성된 trace_syscalls.h</td>
@@ -446,11 +446,11 @@ export: HTML + inline CSS, 서버 불필요</pre>
 </tr>
 <tr>
 <td>생성 포함 총계</td>
-<td>8,717</td>
+<td>8,680</td>
 </tr>
 <tr>
 <td>생성·테스트 포함 총계</td>
-<td>9,918</td>
+<td>9,881</td>
 </tr>
 </tbody></table>
 <p>라인 에디터/스크립트 자동화, 네트워크/HMAC, serve, watch, undo를 제외하고, explain·pipestat·trace·dbg·inspect·rec를 남겼다. 그 결과 원 과제 1~5와 11개 명령을 유지하면서 10,000줄 이하를 만족한다.</p>
@@ -555,7 +555,7 @@ SIGNAL TEST PASSED</pre>
 </tr>
 </tbody></table>
 <h2>5.2 완성도 평가</h2>
-<p>원 과제 요구사항과 11개 명령을 모두 유지했고, 관찰 도구를 중심으로 범위를 재편해 8,717줄(생성 포함)로 줄였다. 257개 자동 테스트와 PTY 시그널 테스트가 통과했다. 라인 에디터/스크립트 자동화/네트워크/serve/watch/undo는 컨셉과 분량을 위해 제외했다.</p>
+<p>원 과제 요구사항과 11개 명령을 모두 유지했고, 관찰 도구를 중심으로 범위를 재편해 8,680줄(생성 포함)로 줄였다. 257개 자동 테스트와 PTY 시그널 테스트가 통과했다. 라인 에디터/스크립트 자동화/네트워크/serve/watch/undo는 컨셉과 분량을 위해 제외했다.</p>
 <h2>5.3 일정/역할/위험</h2>
 <table><thead><tr>
 <th>주차</th>
@@ -620,14 +620,14 @@ SIGNAL TEST PASSED</pre>
 <td>dbg 통과</td>
 </tr>
 <tr>
-<td>녹화 출력 지연</td>
-<td>명령 종료 후 tmpfile 복사</td>
+<td>백그라운드 녹화</td>
+<td>전경은 relay, &amp; 명령은 지연 캡처</td>
 <td>rec 통과</td>
 </tr>
 <tr>
 <td>10,000줄 초과</td>
 <td>관찰 도구 중심으로 범위 재편</td>
-<td>8,717줄</td>
+<td>8,680줄</td>
 </tr>
 </tbody></table>
 <p>역할은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나누었고, 관찰 도구/코어는 류동엽, 테스트·문서·PTY 검증은 강동우가 담당했다.</p>
@@ -703,15 +703,15 @@ make test</pre>
 </tr></thead><tbody>
 <tr>
 <td>include/myshell.h</td>
-<td>262</td>
+<td>240</td>
 </tr>
 <tr>
 <td>src/main.c</td>
-<td>419</td>
+<td>411</td>
 </tr>
 <tr>
 <td>src/parser.c</td>
-<td>935</td>
+<td>921</td>
 </tr>
 <tr>
 <td>src/execute.c</td>
@@ -723,7 +723,7 @@ make test</pre>
 </tr>
 <tr>
 <td>src/builtin.c</td>
-<td>625</td>
+<td>522</td>
 </tr>
 <tr>
 <td>src/cmd_ls.c</td>
@@ -731,7 +731,7 @@ make test</pre>
 </tr>
 <tr>
 <td>src/cmd_fs.c</td>
-<td>952</td>
+<td>938</td>
 </tr>
 <tr>
 <td>src/cmd_text.c</td>
@@ -747,19 +747,19 @@ make test</pre>
 </tr>
 <tr>
 <td>src/cmd_trace.c</td>
-<td>573</td>
+<td>563</td>
 </tr>
 <tr>
 <td>src/cmd_dbg.c</td>
-<td>1263</td>
+<td>1253</td>
 </tr>
 <tr>
 <td>src/cmd_inspect.c</td>
-<td>283</td>
+<td>276</td>
 </tr>
 <tr>
 <td>src/cmd_rec.c</td>
-<td>837</td>
+<td>1002</td>
 </tr>
 <tr>
 <td>src/util.c</td>
@@ -771,7 +771,7 @@ make test</pre>
 </tr>
 <tr>
 <td>합계</td>
-<td>8,717 / 직접 작성 8,580</td>
+<td>8,680 / 직접 작성 8,543</td>
 </tr>
 </tbody></table>
 <h1>부록 D. 참고문헌</h1>

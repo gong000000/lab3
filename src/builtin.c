@@ -76,93 +76,6 @@ static int b_grep(int argc, char **argv, shell_state_t *sh)
     return cmd_grep(argc, argv);
 }
 
-/* ------------------------------------------------------------------ */
-/* test / [                                                           */
-/* ------------------------------------------------------------------ */
-
-static int test_unary(const char *op, const char *arg)
-{
-    struct stat st;
-
-    if (strcmp(op, "-z") == 0)
-        return arg[0] == '\0';
-    if (strcmp(op, "-n") == 0)
-        return arg[0] != '\0';
-    if (strcmp(op, "-e") == 0)
-        return stat(arg, &st) == 0;
-    if (strcmp(op, "-f") == 0)
-        return stat(arg, &st) == 0 && S_ISREG(st.st_mode);
-    if (strcmp(op, "-d") == 0)
-        return stat(arg, &st) == 0 && S_ISDIR(st.st_mode);
-    if (strcmp(op, "-r") == 0)
-        return access(arg, R_OK) == 0;
-    if (strcmp(op, "-w") == 0)
-        return access(arg, W_OK) == 0;
-    if (strcmp(op, "-x") == 0)
-        return access(arg, X_OK) == 0;
-    if (strcmp(op, "-s") == 0)
-        return stat(arg, &st) == 0 && st.st_size > 0;
-    return 0;
-}
-
-static int test_binary(const char *left, const char *op, const char *right)
-{
-    if (strcmp(op, "=") == 0 || strcmp(op, "==") == 0)
-        return strcmp(left, right) == 0;
-    if (strcmp(op, "!=") == 0)
-        return strcmp(left, right) != 0;
-    if (strcmp(op, "-eq") == 0)
-        return strtoll(left, NULL, 10) == strtoll(right, NULL, 10);
-    if (strcmp(op, "-ne") == 0)
-        return strtoll(left, NULL, 10) != strtoll(right, NULL, 10);
-    if (strcmp(op, "-lt") == 0)
-        return strtoll(left, NULL, 10) < strtoll(right, NULL, 10);
-    if (strcmp(op, "-le") == 0)
-        return strtoll(left, NULL, 10) <= strtoll(right, NULL, 10);
-    if (strcmp(op, "-gt") == 0)
-        return strtoll(left, NULL, 10) > strtoll(right, NULL, 10);
-    if (strcmp(op, "-ge") == 0)
-        return strtoll(left, NULL, 10) >= strtoll(right, NULL, 10);
-    return -1;
-}
-
-static int test_eval(char **av, int n)
-{
-    if (n <= 0)
-        return 0;
-    if (strcmp(av[0], "!") == 0)
-        return !test_eval(av + 1, n - 1);
-    if (n == 1)
-        return av[0][0] != '\0';
-    if (n == 2) {
-        if (av[0][0] == '-' && av[0][1] != '\0' && av[0][2] == '\0')
-            return test_unary(av[0], av[1]);
-        return av[0][0] != '\0';
-    }
-    if (n == 3) {
-        int rc = test_binary(av[0], av[1], av[2]);
-
-        if (rc >= 0)
-            return rc;
-    }
-    return 0;
-}
-
-static int b_test(int argc, char **argv, shell_state_t *sh)
-{
-    int bracket = strcmp(argv[0], "[") == 0;
-
-    (void)sh;
-    if (bracket) {
-        if (argc < 2 || strcmp(argv[argc - 1], "]") != 0) {
-            msh_usage("[: missing ']'");
-            return 2;
-        }
-        --argc;
-    }
-    return test_eval(argv + 1, argc - 1) ? 0 : 1;
-}
-
 static const builtin_entry_t builtins[] = {
     { "cd",     builtin_cd,     1 },
     { "pwd",    builtin_pwd,    0 },
@@ -186,8 +99,6 @@ static const builtin_entry_t builtins[] = {
     { "cat",    b_cat,          0 },
     { "grep",   b_grep,         0 },
     { "explain", cmd_explain,   0 },
-    { "test",    b_test,        0 },
-    { "[",       b_test,        0 },
     { "trace",   cmd_trace,     0 },
     { "pipestat", cmd_pipestat,  0 },
     { "dbg",     cmd_dbg,       1 },
@@ -234,9 +145,7 @@ int run_builtin(int argc, char **argv, shell_state_t *sh, int in_child)
     return entry->fn(argc, argv, sh);
 }
 
-/* ------------------------------------------------------------------ */
 /* cd / pwd                                                           */
-/* ------------------------------------------------------------------ */
 
 int builtin_cd(int argc, char **argv, shell_state_t *sh)
 {
@@ -307,9 +216,7 @@ int builtin_pwd(int argc, char **argv, shell_state_t *sh)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* echo                                                               */
-/* ------------------------------------------------------------------ */
 
 static void echo_escape(const char *s)
 {
@@ -395,9 +302,7 @@ int builtin_echo(int argc, char **argv, shell_state_t *sh)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* exit                                                               */
-/* ------------------------------------------------------------------ */
 
 int builtin_exit(int argc, char **argv, shell_state_t *sh)
 {
@@ -422,9 +327,7 @@ int builtin_exit(int argc, char **argv, shell_state_t *sh)
     return (int)status;
 }
 
-/* ------------------------------------------------------------------ */
 /* jobs / wait                                                        */
-/* ------------------------------------------------------------------ */
 
 int builtin_jobs(int argc, char **argv, shell_state_t *sh)
 {
@@ -513,9 +416,7 @@ int builtin_wait(int argc, char **argv, shell_state_t *sh)
     return last;
 }
 
-/* ------------------------------------------------------------------ */
 /* export / unset                                                     */
-/* ------------------------------------------------------------------ */
 
 int builtin_export(int argc, char **argv, shell_state_t *sh)
 {
@@ -572,9 +473,7 @@ int builtin_unset(int argc, char **argv, shell_state_t *sh)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* help / trivial built-ins                                           */
-/* ------------------------------------------------------------------ */
 
 int builtin_help(int argc, char **argv, shell_state_t *sh)
 {
@@ -592,14 +491,13 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  cd pwd echo exit jobs wait export unset help true false\n");
     printf("  ls mkdir rmdir ln cp rm mv cat grep\n");
     printf("  explain 'command line'\n");
-    printf("  test EXPR    (or [ EXPR ])\n");
     printf("  trace [-c] [-f] [-e NAME[,NAME...]] COMMAND...\n");
     printf("  pipestat 'command1 | command2'\n");
     printf("  dbg PROGRAM [ARGS...]   (ELF/ptrace mini debugger)\n");
-    printf("  inspect [PID]          (/proc status, fds, maps, namespaces)\n");
+    printf("  inspect [-f|-m|-n|-j|-s] [PID]  (/proc status/fds/maps/ns)\n");
     printf("  rec start [-x] FILE | rec stop | rec status | rec export FILE HTML\n");
     printf("  replay FILE [-s SPEED]  (replay recorded commands/output)\n\n");
-    printf("Syntax:\n  $(command) command substitution\n\n");
+    printf("Expansion:\n  $(command) command substitution\n\n");
     printf("Interactive keys:\n");
     printf("  Ctrl-C  SIGINT  - interrupt the foreground job\n");
     printf("  Ctrl-Z  SIGQUIT - quit the foreground job (mapped by myshell)\n");
@@ -622,4 +520,3 @@ int builtin_false(int argc, char **argv, shell_state_t *sh)
     (void)sh;
     return 1;
 }
-

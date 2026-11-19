@@ -20,9 +20,7 @@
 static shell_state_t *g_shell = NULL;
 static volatile sig_atomic_t g_terminate = 0;
 
-/* ------------------------------------------------------------------ */
 /* Signals                                                            */
-/* ------------------------------------------------------------------ */
 
 static void on_interrupt(int sig)
 {
@@ -74,9 +72,7 @@ static void install_signal_handlers(void)
     (void)signal(SIGPIPE, SIG_IGN);
 }
 
-/* ------------------------------------------------------------------ */
 /* Terminal                                                           */
-/* ------------------------------------------------------------------ */
 
 static void restore_terminal(void)
 {
@@ -141,9 +137,7 @@ static void init_shell(shell_state_t *sh, int allow_interactive)
     }
 }
 
-/* ------------------------------------------------------------------ */
 /* Line execution                                                     */
-/* ------------------------------------------------------------------ */
 
 /* Find the next top-level ';' or '&' in a command line.  Quoted and
  * escaped separators are ignored, and "#" starts a comment at the
@@ -283,9 +277,7 @@ static void execute_text(const char *text, shell_state_t *sh)
     free(copy);
 }
 
-/* ------------------------------------------------------------------ */
 /* Main loop                                                          */
-/* ------------------------------------------------------------------ */
 
 static void build_prompt(shell_state_t *sh, char *buffer, size_t size)
 {

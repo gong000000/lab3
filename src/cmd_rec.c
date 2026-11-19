@@ -1,26 +1,16 @@
 /*
  * cmd_rec.c - session recording, replay, and standalone HTML export.
- *
- * rec start [-x] FILE   start recording at the interactive REPL
- * rec stop              stop and close the recording
- * rec status            show the current recording state
- * rec export FILE HTML  export a standalone timeline
- * replay FILE [-s N]    replay captured output at N times speed
- *
- * Each REPL command is executed with stdout/stderr temporarily redirected
- * to temporary files.  After the command returns, the output is copied to
- * the real terminal and appended to the record, together with the exit
- * status and elapsed milliseconds.  Output is therefore shown when the
- * command completes, not while it is running; interactive full-screen
- * programs (editors, full-screen tools) should not be recorded.
+ * Foreground output is relayed live and also stored in the record.
  */
 #include "myshell.h"
 
 #include <ctype.h>
 #include <errno.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -48,9 +38,7 @@ typedef struct {
 
 static rec_state_t g_rec;
 
-/* ------------------------------------------------------------------ */
 /* Record format                                                      */
-/* ------------------------------------------------------------------ */
 
 static void rec_write_block(FILE *fp, char tag, const char *data, size_t len)
 {
@@ -240,9 +228,7 @@ int rec_is_active(void)
     return g_rec.active;
 }
 
-/* ------------------------------------------------------------------ */
 /* Output capture                                                     */
-/* ------------------------------------------------------------------ */
 
 static char *rec_read_stream(FILE *fp, size_t *len_out)
 {
@@ -323,9 +309,182 @@ static void rec_restore_stdio(int saved_out, int saved_err)
     }
 }
 
-/* ------------------------------------------------------------------ */
+/* Return nonzero when the line contains a real background '&'.
+ * Command separators are not parsed here; correctness is more important
+ * than capturing a background command, so any unquoted '&' falls back to
+ * the delayed capture path. */
+static int rec_has_background(const char *line)
+{
+    const char *p = line;
+    int in_single = 0;
+    int in_double = 0;
+
+    while (*p != '\0') {
+        if (in_single) {
+            if (*p == '\'')
+                in_single = 0;
+            ++p;
+            continue;
+        }
+        if (in_double) {
+            if (*p == '\\' && p[1] != '\0') {
+                p += 2;
+                continue;
+            }
+            if (*p == '"')
+                in_double = 0;
+            ++p;
+            continue;
+        }
+        if (*p == '\\' && p[1] != '\0') {
+            p += 2;
+            continue;
+        }
+        if (*p == '\'') {
+            in_single = 1;
+            ++p;
+            continue;
+        }
+        if (*p == '"') {
+            in_double = 1;
+            ++p;
+            continue;
+        }
+        if (*p == '&' && p[1] != '&' && p[1] != '>' &&
+            !(p > line && p[-1] == '>'))
+            return 1;
+        ++p;
+    }
+    return 0;
+}
+
+/* Run a foreground command with a relay process, so output appears in real
+ * time while also being copied to temporary files for the recording. */
+static int rec_live_capture(const char *line, shell_state_t *sh, int *status,
+                            long long *ms, char **outp, size_t *out_lenp,
+                            char **errp, size_t *err_lenp)
+{
+    int out_pipe[2] = { -1, -1 };
+    int err_pipe[2] = { -1, -1 };
+    int saved_out = dup(STDOUT_FILENO);
+    int saved_err = dup(STDERR_FILENO);
+    FILE *out_tmp = tmpfile();
+    FILE *err_tmp = tmpfile();
+    pid_t relay;
+    struct timespec start;
+    struct timespec end;
+    int out_left = 1;
+    int err_left = 1;
+
+    if (saved_out < 0 || saved_err < 0 || out_tmp == NULL || err_tmp == NULL ||
+        pipe(out_pipe) < 0 || pipe(err_pipe) < 0)
+        goto fail;
+
+    relay = fork();
+    if (relay < 0)
+        goto fail;
+    if (relay == 0) {
+        struct pollfd fds[2];
+        char buf[4096];
+
+        close(out_pipe[1]);
+        close(err_pipe[1]);
+        fds[0].fd = out_pipe[0];
+        fds[0].events = POLLIN;
+        fds[0].revents = 0;
+        fds[1].fd = err_pipe[0];
+        fds[1].events = POLLIN;
+        fds[1].revents = 0;
+        while (out_left || err_left) {
+            int rc = poll(fds, 2, -1);
+            int i;
+
+            if (rc < 0) {
+                if (errno == EINTR)
+                    continue;
+                break;
+            }
+            for (i = 0; i < 2; ++i) {
+                ssize_t n;
+                int target = i == 0 ? saved_out : saved_err;
+                FILE *log = i == 0 ? out_tmp : err_tmp;
+
+                if (fds[i].fd < 0 || fds[i].revents == 0)
+                    continue;
+                n = read(fds[i].fd, buf, sizeof(buf));
+                if (n > 0) {
+                    (void)msh_write_all(target, buf, (size_t)n);
+                    (void)msh_write_all(fileno(log), buf, (size_t)n);
+                } else if (n == 0) {
+                    close(fds[i].fd);
+                    fds[i].fd = -1;
+                    if (i == 0)
+                        out_left = 0;
+                    else
+                        err_left = 0;
+                } else if (errno != EINTR) {
+                    close(fds[i].fd);
+                    fds[i].fd = -1;
+                    if (i == 0)
+                        out_left = 0;
+                    else
+                        err_left = 0;
+                }
+            }
+        }
+        _exit(0);
+    }
+
+    close(out_pipe[0]);
+    close(err_pipe[0]);
+    fflush(stdout);
+    fflush(stderr);
+    if (dup2(out_pipe[1], STDOUT_FILENO) < 0 ||
+        dup2(err_pipe[1], STDERR_FILENO) < 0) {
+        close(out_pipe[1]);
+        close(err_pipe[1]);
+        rec_restore_stdio(saved_out, saved_err);
+        (void)waitpid(relay, NULL, 0);
+        saved_out = -1;
+        saved_err = -1;
+        goto fail;
+    }
+    close(out_pipe[1]);
+    close(err_pipe[1]);
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    g_rec.capturing = 1;
+    *status = shell_execute_line(line, sh);
+    g_rec.capturing = 0;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    fflush(stdout);
+    fflush(stderr);
+    rec_restore_stdio(saved_out, saved_err);
+    (void)waitpid(relay, NULL, 0);
+
+    *ms = (long long)(end.tv_sec - start.tv_sec) * 1000 +
+          (long long)(end.tv_nsec - start.tv_nsec) / 1000000;
+    *outp = rec_read_stream(out_tmp, out_lenp);
+    *errp = rec_read_stream(err_tmp, err_lenp);
+    fclose(out_tmp);
+    fclose(err_tmp);
+    return 0;
+
+fail:
+    if (saved_out >= 0)
+        close(saved_out);
+    if (saved_err >= 0)
+        close(saved_err);
+    if (out_pipe[0] >= 0) close(out_pipe[0]);
+    if (out_pipe[1] >= 0) close(out_pipe[1]);
+    if (err_pipe[0] >= 0) close(err_pipe[0]);
+    if (err_pipe[1] >= 0) close(err_pipe[1]);
+    if (out_tmp != NULL) fclose(out_tmp);
+    if (err_tmp != NULL) fclose(err_tmp);
+    return -1;
+}
+
 /* -x diagnostics                                                     */
-/* ------------------------------------------------------------------ */
 
 static int rec_is_rec_command(const char *line)
 {
@@ -455,9 +614,7 @@ static char *rec_build_diag(const char *line, shell_state_t *sh)
     return diag;
 }
 
-/* ------------------------------------------------------------------ */
 /* Execute and record one REPL command                                */
-/* ------------------------------------------------------------------ */
 
 int rec_run_and_record(const char *line, shell_state_t *sh)
 {
@@ -472,12 +629,19 @@ int rec_run_and_record(const char *line, shell_state_t *sh)
     size_t err_len = 0;
     struct timespec start;
     struct timespec end;
-    long long ms;
+    long long ms = 0;
     int status;
     int captured = 0;
+    int displayed = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    if (rec_capture_stdio(&out_tmp, &err_tmp, &saved_out, &saved_err) == 0) {
+    if (!rec_has_background(line) &&
+        rec_live_capture(line, sh, &status, &ms, &out, &out_len, &err,
+                         &err_len) == 0) {
+        captured = 1;
+        displayed = 1;
+    } else if (rec_capture_stdio(&out_tmp, &err_tmp, &saved_out,
+                                 &saved_err) == 0) {
         g_rec.capturing = 1;
         status = shell_execute_line(line, sh);
         g_rec.capturing = 0;
@@ -487,15 +651,18 @@ int rec_run_and_record(const char *line, shell_state_t *sh)
         fclose(out_tmp);
         fclose(err_tmp);
         captured = 1;
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        ms = (long long)(end.tv_sec - start.tv_sec) * 1000 +
+             (long long)(end.tv_nsec - start.tv_nsec) / 1000000;
     } else {
         status = shell_execute_line(line, sh);
         out = msh_strdup("");
         err = msh_strdup("");
         out_len = err_len = 0;
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        ms = (long long)(end.tv_sec - start.tv_sec) * 1000 +
+             (long long)(end.tv_nsec - start.tv_nsec) / 1000000;
     }
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    ms = (long long)(end.tv_sec - start.tv_sec) * 1000 +
-         (long long)(end.tv_nsec - start.tv_nsec) / 1000000;
 
     if (out == NULL) {
         out = msh_strdup("");
@@ -505,12 +672,14 @@ int rec_run_and_record(const char *line, shell_state_t *sh)
         err = msh_strdup("");
         err_len = 0;
     }
-    if (out_len > 0)
-        fwrite(out, 1, out_len, stdout);
-    if (err_len > 0)
-        fwrite(err, 1, err_len, stderr);
-    fflush(stdout);
-    fflush(stderr);
+    if (!displayed) {
+        if (out_len > 0)
+            fwrite(out, 1, out_len, stdout);
+        if (err_len > 0)
+            fwrite(err, 1, err_len, stderr);
+        fflush(stdout);
+        fflush(stderr);
+    }
 
     if (g_rec.explain && captured)
         diag = rec_build_diag(line, sh);
@@ -526,9 +695,7 @@ int rec_run_and_record(const char *line, shell_state_t *sh)
     return status;
 }
 
-/* ------------------------------------------------------------------ */
 /* Replay / export                                                    */
-/* ------------------------------------------------------------------ */
 
 static void rec_sleep_ms(long long ms, double speed)
 {
@@ -728,9 +895,7 @@ int cmd_replay(int argc, char **argv, shell_state_t *sh)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* Builtin entry point                                                */
-/* ------------------------------------------------------------------ */
 
 static int rec_start(const char *path, int explain)
 {

@@ -55,9 +55,7 @@ static const char *trace_name(long nr)
     return "unknown";
 }
 
-/* ------------------------------------------------------------------ */
 /* Filters                                                            */
-/* ------------------------------------------------------------------ */
 
 static void filter_add(filter_t *filter, const char *name, size_t len)
 {
@@ -117,9 +115,7 @@ static void filter_free(filter_t *filter)
     memset(filter, 0, sizeof(*filter));
 }
 
-/* ------------------------------------------------------------------ */
 /* Argument formatting                                                */
-/* ------------------------------------------------------------------ */
 
 static int syscall_argc(long nr)
 {
@@ -262,9 +258,7 @@ static void print_syscall(pid_t pid, int show_pid, long nr,
     fflush(stdout);
 }
 
-/* ------------------------------------------------------------------ */
 /* Tracee table                                                       */
-/* ------------------------------------------------------------------ */
 
 static int find_tracee(tracee_t *tracees, pid_t pid)
 {
@@ -341,9 +335,7 @@ static void print_summary(unsigned long long *counts)
     printf("%8llu  %-24s\n", total, "total");
 }
 
-/* ------------------------------------------------------------------ */
 /* Tracer                                                             */
-/* ------------------------------------------------------------------ */
 
 static int run_trace(char **command, int follow, int summary,
                      const filter_t *filter)
@@ -518,9 +510,7 @@ static int run_trace(char **command, int follow, int summary,
     return root_done ? root_status : 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* Builtin entry point                                                */
-/* ------------------------------------------------------------------ */
 
 int cmd_trace(int argc, char **argv, shell_state_t *sh)
 {

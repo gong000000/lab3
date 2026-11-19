@@ -13,9 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
-/* ------------------------------------------------------------------ */
 /* Small shared helpers                                               */
-/* ------------------------------------------------------------------ */
 
 static int is_option(const char *arg)
 {
@@ -122,9 +120,7 @@ static int copy_symlink_entry(const char *src, const char *dst, int force,
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* mkdir                                                              */
-/* ------------------------------------------------------------------ */
 
 int cmd_mkdir(int argc, char **argv)
 {
@@ -197,9 +193,7 @@ int cmd_mkdir(int argc, char **argv)
     return status;
 }
 
-/* ------------------------------------------------------------------ */
 /* rmdir                                                              */
-/* ------------------------------------------------------------------ */
 
 static void rmdir_parents(const char *path, int verbose)
 {
@@ -269,9 +263,7 @@ int cmd_rmdir(int argc, char **argv)
     return status;
 }
 
-/* ------------------------------------------------------------------ */
 /* ln                                                                 */
-/* ------------------------------------------------------------------ */
 
 static int create_link(const char *target, const char *linkname,
                        int symbolic, int force, int verbose)
@@ -403,9 +395,7 @@ int cmd_ln(int argc, char **argv)
     return status;
 }
 
-/* ------------------------------------------------------------------ */
 /* cp                                                                 */
-/* ------------------------------------------------------------------ */
 
 typedef struct {
     int recursive;
@@ -637,9 +627,7 @@ int cmd_cp(int argc, char **argv)
     return status;
 }
 
-/* ------------------------------------------------------------------ */
 /* rm                                                                 */
-/* ------------------------------------------------------------------ */
 
 typedef struct {
     int recursive;
@@ -759,9 +747,7 @@ int cmd_rm(int argc, char **argv)
     return status;
 }
 
-/* ------------------------------------------------------------------ */
 /* mv                                                                 */
-/* ------------------------------------------------------------------ */
 
 typedef struct {
     int force;

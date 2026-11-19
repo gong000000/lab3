@@ -91,9 +91,7 @@ typedef struct {
     dbg_bp_t *pending_bp;
 } dbg_t;
 
-/* ------------------------------------------------------------------ */
 /* Utilities                                                          */
-/* ------------------------------------------------------------------ */
 
 static int read_binary_file(const char *path, unsigned char **data,
                             size_t *size_out)
@@ -161,9 +159,7 @@ static const char *signal_name(int sig)
     }
 }
 
-/* ------------------------------------------------------------------ */
 /* ELF                                                                */
-/* ------------------------------------------------------------------ */
 
 static void dbg_add_symbol(dbg_t *d, const char *name, unsigned long value,
                            unsigned long size)
@@ -308,9 +304,7 @@ static unsigned long dbg_symbol_address(dbg_t *d, const char *name)
     return sym != NULL ? sym->value + d->bias : 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* Process control                                                    */
-/* ------------------------------------------------------------------ */
 
 static int dbg_get_regs(dbg_t *d, struct user_regs_struct *regs)
 {
@@ -1022,9 +1016,7 @@ static int dbg_finish(dbg_t *d)
     return -1;
 }
 
-/* ------------------------------------------------------------------ */
 /* Startup / cleanup                                                  */
-/* ------------------------------------------------------------------ */
 
 static int dbg_spawn(dbg_t *d, char **target)
 {
@@ -1130,9 +1122,7 @@ static void dbg_print_help(void)
     printf("  quit                  leave the debugger\n");
 }
 
-/* ------------------------------------------------------------------ */
 /* Command loop                                                       */
-/* ------------------------------------------------------------------ */
 
 int cmd_dbg(int argc, char **argv, shell_state_t *sh)
 {

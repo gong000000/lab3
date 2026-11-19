@@ -25,9 +25,7 @@
 #define MSH_MAX_ARGS      256
 #define MSH_IO_BUFSIZE    65536
 
-/* ------------------------------------------------------------------ */
 /* Parsed command representation                                      */
-/* ------------------------------------------------------------------ */
 
 typedef enum {
     TOK_WORD = 0,
@@ -88,9 +86,7 @@ typedef struct {
     int npipelines;
 } command_list_t;
 
-/* ------------------------------------------------------------------ */
 /* Background jobs                                                    */
-/* ------------------------------------------------------------------ */
 
 typedef struct {
     int used;
@@ -131,9 +127,7 @@ typedef struct shell_state {
     int termios_modified;
 } shell_state_t;
 
-/* ------------------------------------------------------------------ */
 /* parser.c                                                           */
-/* ------------------------------------------------------------------ */
 
 int parse_line(const char *line, shell_state_t *sh,
                command_list_t *list, char **error);
@@ -142,9 +136,7 @@ void free_pipeline(pipeline_t *pl);
 void free_command(command_t *cmd);
 const char *msh_find_substitution_end(const char *p);
 
-/* ------------------------------------------------------------------ */
 /* execute.c                                                          */
-/* ------------------------------------------------------------------ */
 
 int execute_command_list(command_list_t *list, shell_state_t *sh);
 int execute_pipeline(pipeline_t *pl, shell_state_t *sh);
@@ -154,9 +146,7 @@ void reset_child_signals(void);
 int msh_execute_simple(const char *text, shell_state_t *sh);
 int msh_capture_command(const char *command, shell_state_t *sh, char **output);
 
-/* ------------------------------------------------------------------ */
 /* shell entry points                                                 */
-/* ------------------------------------------------------------------ */
 
 /* Execute one command line with the shell's parser/executor. */
 int shell_execute_line(const char *line, shell_state_t *sh);
@@ -172,9 +162,7 @@ int rec_run_and_record(const char *line, shell_state_t *sh);
 void rec_shutdown(void);
 
 
-/* ------------------------------------------------------------------ */
 /* jobs.c                                                             */
-/* ------------------------------------------------------------------ */
 
 int job_add(shell_state_t *sh, pid_t pgid, const pid_t *pids, int npids,
             const char *command);
@@ -183,9 +171,7 @@ void job_print_all(shell_state_t *sh);
 void job_cleanup(shell_state_t *sh);
 void job_mark_all_done(shell_state_t *sh, int status);
 
-/* ------------------------------------------------------------------ */
 /* builtin.c                                                          */
-/* ------------------------------------------------------------------ */
 
 int is_builtin(const char *name);
 int is_parent_builtin(const char *name);
@@ -203,15 +189,11 @@ int builtin_help(int argc, char **argv, shell_state_t *sh);
 int builtin_true(int argc, char **argv, shell_state_t *sh);
 int builtin_false(int argc, char **argv, shell_state_t *sh);
 
-/* ------------------------------------------------------------------ */
 /* cmd_ls.c                                                           */
-/* ------------------------------------------------------------------ */
 
 int cmd_ls(int argc, char **argv);
 
-/* ------------------------------------------------------------------ */
 /* cmd_fs.c : mkdir, rmdir, ln, cp, rm, mv                            */
-/* ------------------------------------------------------------------ */
 
 int cmd_mkdir(int argc, char **argv);
 int cmd_rmdir(int argc, char **argv);
@@ -220,16 +202,12 @@ int cmd_cp(int argc, char **argv);
 int cmd_rm(int argc, char **argv);
 int cmd_mv(int argc, char **argv);
 
-/* ------------------------------------------------------------------ */
 /* cmd_text.c : cat, grep                                             */
-/* ------------------------------------------------------------------ */
 
 int cmd_cat(int argc, char **argv);
 int cmd_grep(int argc, char **argv);
 
-/* ------------------------------------------------------------------ */
 /* util.c                                                             */
-/* ------------------------------------------------------------------ */
 
 void *msh_malloc(size_t size);
 void *msh_calloc(size_t nmemb, size_t size);

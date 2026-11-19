@@ -1,15 +1,8 @@
 /*
- * cmd_inspect.c - inspect the shell and other processes through /proc.
- *
- * Usage: inspect [-f|-m|-n|-j] [PID]
- *
- * The command makes the "transparent shell" idea concrete: the same shell
- * that runs a command can show its process identity, open file descriptors,
- * memory map, namespaces, resource limits, and background jobs.
+ * cmd_inspect.c - inspect processes through /proc.
  */
 #include "myshell.h"
 
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>

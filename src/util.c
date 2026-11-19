@@ -13,9 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
-/* ------------------------------------------------------------------ */
 /* Allocation wrappers                                                */
-/* ------------------------------------------------------------------ */
 
 static void out_of_memory(void)
 {
@@ -67,9 +65,7 @@ char *msh_strndup(const char *s, size_t n)
     return p;
 }
 
-/* ------------------------------------------------------------------ */
 /* Diagnostics                                                        */
-/* ------------------------------------------------------------------ */
 
 void msh_error(const char *fmt, ...)
 {
@@ -108,9 +104,7 @@ int msh_confirm(const char *fmt, ...)
     return buf[0] == 'y' || buf[0] == 'Y';
 }
 
-/* ------------------------------------------------------------------ */
 /* Path helpers                                                       */
-/* ------------------------------------------------------------------ */
 
 char *msh_join_path(const char *dir, const char *name)
 {
@@ -195,9 +189,7 @@ int msh_is_directory(const char *path)
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-/* ------------------------------------------------------------------ */
 /* Low-level I/O                                                      */
-/* ------------------------------------------------------------------ */
 
 int msh_write_all(int fd, const void *buf, size_t len)
 {
@@ -216,9 +208,7 @@ int msh_write_all(int fd, const void *buf, size_t len)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* File copy / removal                                                */
-/* ------------------------------------------------------------------ */
 
 int msh_copy_file_contents(const char *src, const char *dst, mode_t mode,
                            int force)

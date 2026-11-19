@@ -1,0 +1,24 @@
+MSHREC1
+C 32
+echo first; sleep 2; echo second
+O 13
+first
+second
+
+E 0
+
+S 0
+T 2003
+X 0
+
+C 8
+rec stop
+O 41
+recording stopped: live.rec (1 commands)
+
+E 0
+
+S 0
+T 0
+X 0
+

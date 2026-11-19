@@ -63,7 +63,7 @@ BLOCKS: list[tuple] = [
      [
          ["필수 기능", "exit, 백그라운드(&), SIGINT/SIGQUIT, 재지향(>, <), 파이프(|)"],
          ["필수 내장 명령", "ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개)"],
-         ["보조 내장 명령", "echo, export, unset, jobs, wait, help, true, false, :, test, ["],
+         ["보조 내장 명령", "echo, export, unset, jobs, wait, help, true, false, :"],
          ["관찰 도구", "explain(파서), pipestat(파이프), trace(시스템 호출), dbg(ELF/ptrace), inspect(/proc)"],
          ["기록 도구", "rec/replay: 명령·출력·상태·시간, -x explain/trace, HTML export"],
          ["범위 제외", "라인 에디터/스크립트 자동화, 네트워크/HMAC, serve, watch, undo"],
@@ -84,7 +84,7 @@ BLOCKS: list[tuple] = [
      ]),
 
     ("h2", "1.5 결과 요약"),
-    ("p", "최종 소스는 직접 작성 8,580줄, 생성 테이블 포함 8,717줄로 10,000줄 "
+    ("p", "최종 소스는 직접 작성 8,543줄, 생성 테이블 포함 8,680줄로 10,000줄 "
           "이하를 만족한다. 11개 필수 명령과 관찰 도구 5종(explain, pipestat, "
           "trace, dbg, inspect), 기록 도구(rec/replay)를 제공하며, 기능 94개·"
           "확장 21개·파일 입력 4개·추적 32개·디버거 44개·녹화 35개·조사 27개 "
@@ -92,7 +92,7 @@ BLOCKS: list[tuple] = [
     ("table",
      ["항목", "결과"],
      [
-         ["소스 규모", "직접 작성 8,580줄, 생성 포함 8,717줄 (10,000줄 이하)"],
+         ["소스 규모", "직접 작성 8,543줄, 생성 포함 8,680줄 (10,000줄 이하)"],
          ["필수 내장 명령", "11개"],
          ["기능 테스트", "94 / 94"],
          ["확장 테스트", "21 / 21 (explain, &&/||, glob, pipestat)"],
@@ -144,24 +144,24 @@ BLOCKS: list[tuple] = [
     ("table",
      ["파일", "역할", "줄 수"],
      [
-         ["include/myshell.h", "공용 구조체와 함수 원형", "262"],
-         ["src/main.c", "REPL, 명령 분리, 시그널, 터미널", "419"],
-         ["src/parser.c", "토큰화, 확장, 문법 분석", "935"],
+         ["include/myshell.h", "공용 구조체와 함수 원형", "240"],
+         ["src/main.c", "REPL, 명령 분리, 시그널, 터미널", "411"],
+         ["src/parser.c", "토큰화, 확장, 문법 분석", "921"],
          ["src/execute.c", "fork/exec, 파이프, 재지향, 캡처", "469"],
          ["src/jobs.c", "백그라운드 작업", "154"],
-         ["src/builtin.c", "내장 명령 디스패치", "625"],
+         ["src/builtin.c", "내장 명령 디스패치", "522"],
          ["src/cmd_ls.c", "ls", "370"],
-         ["src/cmd_fs.c", "mkdir/rmdir/ln/cp/rm/mv", "952"],
+         ["src/cmd_fs.c", "mkdir/rmdir/ln/cp/rm/mv", "938"],
          ["src/cmd_text.c", "cat/grep", "469"],
          ["src/cmd_explain.c", "파서 시각화", "111"],
          ["src/cmd_pipestat.c", "파이프 단계 계측", "330"],
-         ["src/cmd_trace.c", "ptrace 시스템 호출 추적", "573"],
-         ["src/cmd_dbg.c", "ELF/ptrace 미니 디버거", "1263"],
-         ["src/cmd_inspect.c", "/proc 기반 프로세스 조사", "283"],
-         ["src/cmd_rec.c", "세션 녹화/재생/HTML", "837"],
+         ["src/cmd_trace.c", "ptrace 시스템 호출 추적", "563"],
+         ["src/cmd_dbg.c", "ELF/ptrace 미니 디버거", "1253"],
+         ["src/cmd_inspect.c", "/proc 기반 프로세스 조사", "276"],
+         ["src/cmd_rec.c", "세션 녹화/재생/HTML", "1002"],
          ["src/util.c", "공용 유틸", "528"],
          ["src/trace_syscalls.h", "시스템 호출 이름 테이블 (생성)", "137"],
-         ["합계", "직접 작성 8,580 + 생성 137 = 8,717", ""],
+         ["합계", "직접 작성 8,543 + 생성 137 = 8,680", ""],
      ]),
 
     ("h2", "2.3 핵심 자료구조"),
@@ -213,9 +213,9 @@ BLOCKS: list[tuple] = [
           "rlimit, 백그라운드 작업도 함께 출력한다. 시스템 프로그래밍에서 "
           "프로세스와 파일 디스크립터가 어떻게 표현되는지 직접 확인하는 도구이다."),
     ("h3", "2.4.8 rec/replay"),
-    ("p", "rec는 REPL 명령 실행 시 stdout/stderr를 tmpfile()로 돌리고, 명령 종료 "
-          "후 원래 터미널로 복사하면서 명령/출력/상태/시간을 길이 기반 레코드에 "
-          "기록한다. replay는 명령을 재실행하지 않고 출력과 상태를 재생하며, "
+    ("p", "rec는 전경 명령의 stdout/stderr를 relay 프로세스로 실시간 중계하면서 "
+          "동시에 임시 파일에 기록한다. 백그라운드(&) 명령은 지연 캡처 경로로 "
+          "처리한다. replay는 명령을 재실행하지 않고 출력과 상태를 재생하며, "
           "rec export는 단독 HTML 타임라인을 만든다. -x는 explain과 trace -c "
           "요약을 추가한다."),
     ("code", """record: C/O/E/S/T/X (명령, stdout, stderr, 상태, ms, 진단)
@@ -228,7 +228,7 @@ export: HTML + inline CSS, 서버 불필요"""),
      ["제한 요소", "설계 기준", "본 프로젝트의 대응"],
      [
          ["경제성", "1,000~10,000줄 원칙",
-          "직접 작성 8,580줄, 생성 포함 8,717줄로 준수"],
+          "직접 작성 8,543줄, 생성 포함 8,680줄로 준수"],
          ["안정성", "외부 환경 변화에도 동작",
           "오류 반환값 검사, 좀비 회수, 재지향 복구, 257개 자동 테스트"],
          ["생산성", "학습/응용 가능",
@@ -245,14 +245,14 @@ export: HTML + inline CSS, 서버 불필요"""),
     ("table",
      ["항목", "줄 수"],
      [
-         ["include/myshell.h + src/*.c", "8,580"],
-         ["빈 줄", "994"],
-         ["주석", "335"],
-         ["주석·빈 줄 제외 코드", "7,251"],
+         ["include/myshell.h + src/*.c", "8,543"],
+         ["빈 줄", "997"],
+         ["주석", "204"],
+         ["주석·빈 줄 제외 코드", "7,342"],
          ["생성된 trace_syscalls.h", "137"],
          ["테스트 코드(별도)", "1,201"],
-         ["생성 포함 총계", "8,717"],
-         ["생성·테스트 포함 총계", "9,918"],
+         ["생성 포함 총계", "8,680"],
+         ["생성·테스트 포함 총계", "9,881"],
      ]),
     ("p", "라인 에디터/스크립트 자동화, 네트워크/HMAC, serve, watch, undo를 제외하고, "
           "explain·pipestat·trace·dbg·inspect·rec를 남겼다. 그 결과 원 과제 1~5와 11개 명령을 유지하면서 10,000줄 이하를 "
@@ -320,7 +320,7 @@ SIGNAL TEST PASSED"""),
      ]),
     ("h2", "5.2 완성도 평가"),
     ("p", "원 과제 요구사항과 11개 명령을 모두 유지했고, 관찰 도구를 중심으로 "
-          "범위를 재편해 8,717줄(생성 포함)로 줄였다. 257개 자동 테스트와 PTY "
+          "범위를 재편해 8,680줄(생성 포함)로 줄였다. 257개 자동 테스트와 PTY "
           "시그널 테스트가 통과했다. 라인 에디터/스크립트 자동화/네트워크/serve/"
           "watch/undo는 컨셉과 분량을 위해 제외했다."),
 
@@ -341,8 +341,8 @@ SIGNAL TEST PASSED"""),
          ["ptrace 차단", "자기 자식만 PTRACE_TRACEME", "WSL2 통과"],
          ["PIE 주소 불일치", "/proc/PID/maps bias 계산", "dbg PIE 테스트"],
          ["브레이크포인트 재정지", "복원→SINGLESTEP→재설치", "dbg 통과"],
-         ["녹화 출력 지연", "명령 종료 후 tmpfile 복사", "rec 통과"],
-         ["10,000줄 초과", "관찰 도구 중심으로 범위 재편", "8,717줄"],
+         ["백그라운드 녹화", "전경은 relay, & 명령은 지연 캡처", "rec 통과"],
+         ["10,000줄 초과", "관찰 도구 중심으로 범위 재편", "8,680줄"],
      ]),
     ("p", "역할은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, "
           "grep)로 나누었고, 관찰 도구/코어는 류동엽, 테스트·문서·PTY 검증은 "
@@ -390,24 +390,24 @@ make test"""),
     ("table",
      ["파일", "줄 수"],
      [
-         ["include/myshell.h", "262"],
-         ["src/main.c", "419"],
-         ["src/parser.c", "935"],
+         ["include/myshell.h", "240"],
+         ["src/main.c", "411"],
+         ["src/parser.c", "921"],
          ["src/execute.c", "469"],
          ["src/jobs.c", "154"],
-         ["src/builtin.c", "625"],
+         ["src/builtin.c", "522"],
          ["src/cmd_ls.c", "370"],
-         ["src/cmd_fs.c", "952"],
+         ["src/cmd_fs.c", "938"],
          ["src/cmd_text.c", "469"],
          ["src/cmd_explain.c", "111"],
          ["src/cmd_pipestat.c", "330"],
-         ["src/cmd_trace.c", "573"],
-         ["src/cmd_dbg.c", "1263"],
-         ["src/cmd_inspect.c", "283"],
-         ["src/cmd_rec.c", "837"],
+         ["src/cmd_trace.c", "563"],
+         ["src/cmd_dbg.c", "1253"],
+         ["src/cmd_inspect.c", "276"],
+         ["src/cmd_rec.c", "1002"],
          ["src/util.c", "528"],
          ["src/trace_syscalls.h", "137"],
-         ["합계", "8,717 / 직접 작성 8,580"],
+         ["합계", "8,680 / 직접 작성 8,543"],
      ]),
     ("h1", "부록 D. 참고문헌"),
     ("bullets", [
