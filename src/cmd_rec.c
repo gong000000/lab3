@@ -1,7 +1,4 @@
-/*
- * cmd_rec.c - session recording, replay, and standalone HTML export.
- * Foreground output is relayed live and also stored in the record.
- */
+/* cmd_rec.c - session recording, replay, and HTML export. */
 #include "myshell.h"
 
 #include <ctype.h>
@@ -38,7 +35,6 @@ typedef struct {
 
 static rec_state_t g_rec;
 
-/* Record format                                                      */
 
 static void rec_write_block(FILE *fp, char tag, const char *data, size_t len)
 {
@@ -228,7 +224,6 @@ int rec_is_active(void)
     return g_rec.active;
 }
 
-/* Output capture                                                     */
 
 static char *rec_read_stream(FILE *fp, size_t *len_out)
 {
@@ -309,10 +304,7 @@ static void rec_restore_stdio(int saved_out, int saved_err)
     }
 }
 
-/* Return nonzero when the line contains a real background '&'.
- * Command separators are not parsed here; correctness is more important
- * than capturing a background command, so any unquoted '&' falls back to
- * the delayed capture path. */
+/* Any unquoted '&' uses the delayed capture path. */
 static int rec_has_background(const char *line)
 {
     const char *p = line;
@@ -358,8 +350,7 @@ static int rec_has_background(const char *line)
     return 0;
 }
 
-/* Run a foreground command with a relay process, so output appears in real
- * time while also being copied to temporary files for the recording. */
+/* Foreground: relay output live and copy it to temporary files. */
 static int rec_live_capture(const char *line, shell_state_t *sh, int *status,
                             long long *ms, char **outp, size_t *out_lenp,
                             char **errp, size_t *err_lenp)
@@ -484,7 +475,6 @@ fail:
     return -1;
 }
 
-/* -x diagnostics                                                     */
 
 static int rec_is_rec_command(const char *line)
 {
@@ -614,7 +604,6 @@ static char *rec_build_diag(const char *line, shell_state_t *sh)
     return diag;
 }
 
-/* Execute and record one REPL command                                */
 
 int rec_run_and_record(const char *line, shell_state_t *sh)
 {
@@ -695,7 +684,6 @@ int rec_run_and_record(const char *line, shell_state_t *sh)
     return status;
 }
 
-/* Replay / export                                                    */
 
 static void rec_sleep_ms(long long ms, double speed)
 {
@@ -895,7 +883,6 @@ int cmd_replay(int argc, char **argv, shell_state_t *sh)
     return 0;
 }
 
-/* Builtin entry point                                                */
 
 static int rec_start(const char *path, int explain)
 {

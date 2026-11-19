@@ -3,6 +3,11 @@
 `simplesh.c`를 확장한 POSIX 쉘입니다. 원 과제의 필수 기능 5개와 내장 명령 11개를
 구현했고, 파서·파이프·시스템 호출·프로세스 상태를 확인하는 도구를 함께 넣었습니다.
 
+본 프로젝트는 Lab 3의 5개 요구사항과 11개 내장 명령을 완성하고, 그 위에
+“시스템 프로그래밍 학습용 투명 쉘” 컨셉을 올렸습니다. 명령을 실행하는 데서
+끝나지 않고 파서·파이프·시스템 호출·ELF·프로세스 상태를 관찰하고, 세션을
+기록·재생하는 도구를 같은 바이너리에 결합했습니다.
+
 - 저장소: <https://github.com/gong000000/lab3>
 - 라이선스: MIT
 
@@ -201,6 +206,7 @@ inspect -f      # fd
 inspect -m      # memory maps
 inspect -n      # namespaces
 inspect -j      # jobs
+inspect -t      # process tree
 inspect PID
 ```
 
@@ -236,9 +242,9 @@ Passed: 94
 File-input tests passed: 4
 Extension tests passed: 21
 Trace tests passed: 32
-Debugger tests passed: 44
+Debugger tests passed: 46
 Recording tests passed: 35
-Inspect tests passed: 27
+Inspect tests passed: 31
 SIGNAL TEST PASSED
 ```
 
@@ -246,14 +252,14 @@ SIGNAL TEST PASSED
 
 | 항목 | 줄 수 |
 |---|---:|
-| `include/myshell.h` + `src/*.c` | 8,543 |
-| 빈 줄 | 997 |
-| 주석 | 204 |
-| 주석·빈 줄 제외 코드 | 7,342 |
+| `include/myshell.h` + `src/*.c` | 8,626 |
+| 빈 줄 | 1,007 |
+| 주석 | 164 |
+| 주석·빈 줄 제외 코드 | 7,455 |
 | 생성된 `src/trace_syscalls.h` | 137 |
-| 테스트 코드 | 1,201 |
-| 생성 포함 총계 | 8,680 |
-| 생성·테스트 포함 총계 | 9,881 |
+| 테스트 코드 | 1,214 |
+| 생성 포함 총계 | 8,763 |
+| 생성·테스트 포함 총계 | 9,977 |
 
 ## 7. 파일 구성
 
@@ -318,7 +324,7 @@ SIGNAL TEST PASSED
 | `pipestat` | `pipestat 'cmd1 \| cmd2'` |
 | `trace` | `-c`, `-f`, `-e NAME[,NAME...]` |
 | `dbg` | `PROGRAM [ARGS...]`; `break`, `run`, `continue`, `step`, `finish`, `bt`, `regs`, `x/Nx`, `info break`, `delete`, `quit` |
-| `inspect` | `-f`, `-m`, `-n`, `-j`, `-s`, `PID` |
+| `inspect` | `-f`, `-m`, `-n`, `-j`, `-s`, `-t`, `PID` |
 | `rec` | `start [-x] FILE`, `stop`, `status`, `export FILE HTML` |
 | `replay` | `FILE [-s SPEED]`, `-x` |
 

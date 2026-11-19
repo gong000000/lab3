@@ -67,6 +67,14 @@ status_is 0 "inspect self pid status"
 stdout_has "status (/proc/" "self status"
 stdout_has "fds (/proc/" "self fds"
 
+echo "== process tree =="
+run 'inspect -t'
+status_is 0 "inspect tree status"
+stdout_has "process tree" "tree header"
+stdout_has "myshell" "tree root"
+run 'sleep 2 & inspect -t; wait'
+stdout_has "sleep" "tree child process"
+
 echo "== errors =="
 run 'inspect -z'
 status_is 2 "bad option status"

@@ -81,23 +81,23 @@ BLOCKS: list[tuple] = [
      ]),
 
     ("h2", "1.5 결과 요약"),
-    ("p", "소스는 직접 작성 8,543줄, 생성 테이블 포함 8,680줄이다. 11개 필수 "
+    ("p", "소스는 직접 작성 8,626줄, 생성 테이블 포함 8,763줄이다. 11개 필수 "
           "명령과 관찰 도구 5종(explain, pipestat, trace, dbg, inspect), 기록 "
           "도구(rec/replay)를 제공하며, 기능 94개·확장 21개·파일 입력 4개·추적 "
-          "32개·디버거 44개·녹화 35개·조사 27개 테스트와 PTY 시그널 테스트를 "
+          "32개·디버거 46개·녹화 35개·조사 31개 테스트와 PTY 시그널 테스트를 "
           "통과했다."),
     ("table",
      ["항목", "결과"],
      [
-         ["소스 규모", "직접 작성 8,543줄, 생성 포함 8,680줄"],
+         ["소스 규모", "직접 작성 8,626줄, 생성 포함 8,763줄"],
          ["필수 내장 명령", "11개"],
          ["기능 테스트", "94 / 94"],
          ["확장 테스트", "21 / 21 (explain, &&/||, glob, pipestat)"],
          ["파일 입력", "4 / 4"],
          ["추적", "32 / 32"],
-         ["디버거", "44 / 44"],
+         ["디버거", "46 / 46"],
          ["녹화", "35 / 35"],
-         ["조사", "27 / 27"],
+         ["조사", "31 / 31"],
          ["시그널", "PTY 시그널 테스트 통과"],
      ]),
 
@@ -139,26 +139,25 @@ BLOCKS: list[tuple] = [
 
     ("h2", "2.2 모듈 구성"),
     ("table",
-     ["파일", "역할", "줄 수"],
+     ["파일", "역할"],
      [
-         ["include/myshell.h", "공용 구조체와 함수 원형", "240"],
-         ["src/main.c", "REPL, 명령 분리, 시그널, 터미널", "411"],
-         ["src/parser.c", "토큰화, 확장, 문법 분석", "921"],
-         ["src/execute.c", "fork/exec, 파이프, 재지향, 캡처", "469"],
-         ["src/jobs.c", "백그라운드 작업", "154"],
-         ["src/builtin.c", "내장 명령 디스패치", "522"],
-         ["src/cmd_ls.c", "ls", "370"],
-         ["src/cmd_fs.c", "mkdir/rmdir/ln/cp/rm/mv", "938"],
-         ["src/cmd_text.c", "cat/grep", "469"],
-         ["src/cmd_explain.c", "파서 시각화", "111"],
-         ["src/cmd_pipestat.c", "파이프 단계 계측", "330"],
-         ["src/cmd_trace.c", "ptrace 시스템 호출 추적", "563"],
-         ["src/cmd_dbg.c", "ELF/ptrace 미니 디버거", "1253"],
-         ["src/cmd_inspect.c", "/proc 기반 프로세스 조사", "276"],
-         ["src/cmd_rec.c", "세션 녹화/재생/HTML", "1002"],
-         ["src/util.c", "공용 유틸", "528"],
-         ["src/trace_syscalls.h", "시스템 호출 이름 테이블 (생성)", "137"],
-         ["합계", "직접 작성 8,543 + 생성 137 = 8,680", ""],
+         ["include/myshell.h", "공용 구조체와 함수 원형"],
+         ["src/main.c", "REPL, 명령 분리, 시그널, 터미널"],
+         ["src/parser.c", "토큰화, 확장, 문법 분석"],
+         ["src/execute.c", "fork/exec, 파이프, 재지향, 캡처"],
+         ["src/jobs.c", "백그라운드 작업"],
+         ["src/builtin.c", "내장 명령 디스패치"],
+         ["src/cmd_ls.c", "ls"],
+         ["src/cmd_fs.c", "mkdir/rmdir/ln/cp/rm/mv"],
+         ["src/cmd_text.c", "cat/grep"],
+         ["src/cmd_explain.c", "파서 시각화"],
+         ["src/cmd_pipestat.c", "파이프 단계 계측"],
+         ["src/cmd_trace.c", "ptrace 시스템 호출 추적"],
+         ["src/cmd_dbg.c", "ELF/ptrace 미니 디버거"],
+         ["src/cmd_inspect.c", "/proc 기반 프로세스 조사"],
+         ["src/cmd_rec.c", "세션 녹화/재생/HTML"],
+         ["src/util.c", "공용 유틸"],
+         ["src/trace_syscalls.h", "시스템 호출 이름 테이블 (생성)"],
      ]),
 
     ("h2", "2.3 핵심 자료구조"),
@@ -205,7 +204,7 @@ BLOCKS: list[tuple] = [
           "실행한 후 브레이크포인트를 다시 심는다. regs, x/Nx, bt, finish, "
           "SIGSEGV 자동 분석을 지원한다."),
     ("h3", "2.4.7 inspect"),
-    ("p", "inspect는 /proc/PID/status, fd, maps, ns를 읽어 프로세스의 상태를 "
+    ("p", "inspect는 /proc/PID/status, fd, maps, ns와 프로세스 트리를 읽어 상태를 "
           "보여 준다. 쉘 자신의 pid/ppid/pgid/sid, uid/gid, cwd, umask, "
           "rlimit, 백그라운드 작업도 함께 출력한다. 시스템 프로그래밍에서 "
           "프로세스와 파일 디스크립터가 어떻게 표현되는지 직접 확인하는 도구이다."),
@@ -225,9 +224,9 @@ export: HTML + inline CSS, 서버 불필요"""),
      ["제한 요소", "설계 기준", "본 프로젝트의 대응"],
      [
          ["경제성", "1,000~10,000줄 원칙",
-          "직접 작성 8,543줄, 생성 포함 8,680줄로 준수"],
+          "직접 작성 8,626줄, 생성 포함 8,763줄로 준수"],
          ["안정성", "외부 환경 변화에도 동작",
-          "오류 반환값 검사, 좀비 회수, 재지향 복구, 257개 자동 테스트"],
+          "오류 반환값 검사, 좀비 회수, 재지향 복구, 263개 자동 테스트"],
          ["생산성", "학습/응용 가능",
           "11개 명령 + explain/pipestat/trace/dbg/inspect/rec"],
          ["윤리성", "안전한 파일 동작",
@@ -241,14 +240,14 @@ export: HTML + inline CSS, 서버 불필요"""),
     ("table",
      ["항목", "줄 수"],
      [
-         ["include/myshell.h + src/*.c", "8,543"],
-         ["빈 줄", "997"],
-         ["주석", "204"],
-         ["주석·빈 줄 제외 코드", "7,342"],
+         ["include/myshell.h + src/*.c", "8,626"],
+         ["빈 줄", "1,007"],
+         ["주석", "164"],
+         ["주석·빈 줄 제외 코드", "7,455"],
          ["생성된 trace_syscalls.h", "137"],
-         ["테스트 코드(별도)", "1,201"],
-         ["생성 포함 총계", "8,680"],
-         ["생성·테스트 포함 총계", "9,881"],
+         ["테스트 코드(별도)", "1,214"],
+         ["생성 포함 총계", "8,763"],
+         ["생성·테스트 포함 총계", "9,977"],
      ]),
     ("p", "헤더와 기능별 소스를 분리해 빌드와 유지보수가 쉽도록 구성했다."),
 
@@ -285,16 +284,16 @@ export: HTML + inline CSS, 서버 불필요"""),
     ("p", "tests/run_tests.sh는 stdout/stderr/종료 상태를 비교하는 94개 기능 "
           "테스트를 수행한다. test_ext는 explain/&&/glob/pipestat 21개, "
           "test_file_input은 4개, test_trace는 32개, test_dbg는 44개, "
-          "test_rec는 35개, test_inspect는 27개를 검사한다. test_signals.py는 "
+          "test_rec는 35개, test_inspect는 31개를 검사한다. test_signals.py는 "
           "pty.fork()로 Ctrl-C/Ctrl-Z 후 쉘 생존을 확인한다."),
     ("h2", "4.3 테스트 결과"),
     ("code", """Passed: 94
 File-input tests passed: 4
 Extension tests passed: 21
 Trace tests passed: 32
-Debugger tests passed: 44
+Debugger tests passed: 46
 Recording tests passed: 35
-Inspect tests passed: 27
+Inspect tests passed: 31
 SIGNAL TEST PASSED"""),
 
     ("pagebreak",),
@@ -309,12 +308,12 @@ SIGNAL TEST PASSED"""),
          ["pipestat", "완료", "단계별 바이트/시간/상태"],
          ["trace", "완료", "시스템 호출/필터/요약"],
          ["dbg", "완료", "ELF/PIE, break/step/bt, SIGSEGV"],
-         ["inspect", "완료", "/proc status/fd/maps/ns"],
+         ["inspect", "완료", "/proc status/fd/maps/ns/tree"],
          ["rec/replay", "완료", "출력/상태/시간, HTML"],
      ]),
     ("h2", "5.2 완성도 평가"),
-    ("p", "원 과제 요구사항과 11개 명령을 모두 유지했고, 8,680줄로 구성했다. "
-          "257개 자동 테스트와 PTY 시그널 테스트가 통과했다."),
+    ("p", "원 과제 요구사항과 11개 명령을 모두 유지했고, 8,763줄로 구성했다. "
+          "263개 자동 테스트와 PTY 시그널 테스트가 통과했다."),
 
     ("h2", "5.3 일정/역할/위험"),
     ("table",
@@ -361,31 +360,18 @@ make test"""),
          ["추적", "필터/요약/자식/문자열/오류", "32"],
          ["디버거", "ELF/PIE, break/step/finish/bt, SIGSEGV", "44"],
          ["녹화", "rec/replay, 출력, HTML, -x, 오류", "35"],
-         ["조사", "/proc status/fd/maps/ns/jobs/limits/오류", "27"],
+         ["조사", "/proc status/fd/maps/ns/tree/jobs/limits/오류", "31"],
          ["시그널", "PTY Ctrl-C/Ctrl-Z", "1 시나리오"],
      ]),
     ("h1", "부록 C. 소스 규모"),
     ("table",
-     ["파일", "줄 수"],
+     ["항목", "줄 수"],
      [
-         ["include/myshell.h", "240"],
-         ["src/main.c", "411"],
-         ["src/parser.c", "921"],
-         ["src/execute.c", "469"],
-         ["src/jobs.c", "154"],
-         ["src/builtin.c", "522"],
-         ["src/cmd_ls.c", "370"],
-         ["src/cmd_fs.c", "938"],
-         ["src/cmd_text.c", "469"],
-         ["src/cmd_explain.c", "111"],
-         ["src/cmd_pipestat.c", "330"],
-         ["src/cmd_trace.c", "563"],
-         ["src/cmd_dbg.c", "1253"],
-         ["src/cmd_inspect.c", "276"],
-         ["src/cmd_rec.c", "1002"],
-         ["src/util.c", "528"],
-         ["src/trace_syscalls.h", "137"],
-         ["합계", "8,680 / 직접 작성 8,543"],
+         ["include/myshell.h + src/*.c", "8,626"],
+         ["생성된 trace_syscalls.h", "137"],
+         ["제품 소스 합계", "8,763"],
+         ["테스트 코드", "1,214"],
+         ["합계", "9,977"],
      ]),
     ("h1", "부록 D. 참고문헌"),
     ("bullets", [

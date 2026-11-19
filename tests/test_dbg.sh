@@ -187,6 +187,11 @@ status_is 2 "usage status"
 stderr_has "usage: dbg" "usage message"
 
 # ------------------------------------------------------------------
+timeout 5 "$BIN" -c 'dbg ./missing-program' >"$OUT" 2>"$ERR"
+STATUS=$?
+status_is 1 "missing program status"
+stderr_has "No such file" "missing program message"
+
 echo
 if [ "$FAIL" -eq 0 ]; then
     echo "Debugger tests passed: $PASS"

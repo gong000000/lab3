@@ -136,14 +136,14 @@
 </tr>
 </tbody></table>
 <h2>1.5 결과 요약</h2>
-<p>소스는 직접 작성 8,543줄, 생성 테이블 포함 8,680줄이다. 11개 필수 명령과 관찰 도구 5종(explain, pipestat, trace, dbg, inspect), 기록 도구(rec/replay)를 제공하며, 기능 94개·확장 21개·파일 입력 4개·추적 32개·디버거 44개·녹화 35개·조사 27개 테스트와 PTY 시그널 테스트를 통과했다.</p>
+<p>소스는 직접 작성 8,626줄, 생성 테이블 포함 8,763줄이다. 11개 필수 명령과 관찰 도구 5종(explain, pipestat, trace, dbg, inspect), 기록 도구(rec/replay)를 제공하며, 기능 94개·확장 21개·파일 입력 4개·추적 32개·디버거 46개·녹화 35개·조사 31개 테스트와 PTY 시그널 테스트를 통과했다.</p>
 <table><thead><tr>
 <th>항목</th>
 <th>결과</th>
 </tr></thead><tbody>
 <tr>
 <td>소스 규모</td>
-<td>직접 작성 8,543줄, 생성 포함 8,680줄</td>
+<td>직접 작성 8,626줄, 생성 포함 8,763줄</td>
 </tr>
 <tr>
 <td>필수 내장 명령</td>
@@ -167,7 +167,7 @@
 </tr>
 <tr>
 <td>디버거</td>
-<td>44 / 44</td>
+<td>46 / 46</td>
 </tr>
 <tr>
 <td>녹화</td>
@@ -175,7 +175,7 @@
 </tr>
 <tr>
 <td>조사</td>
-<td>27 / 27</td>
+<td>31 / 31</td>
 </tr>
 <tr>
 <td>시그널</td>
@@ -221,97 +221,74 @@
 <table><thead><tr>
 <th>파일</th>
 <th>역할</th>
-<th>줄 수</th>
 </tr></thead><tbody>
 <tr>
 <td>include/myshell.h</td>
 <td>공용 구조체와 함수 원형</td>
-<td>240</td>
 </tr>
 <tr>
 <td>src/main.c</td>
 <td>REPL, 명령 분리, 시그널, 터미널</td>
-<td>411</td>
 </tr>
 <tr>
 <td>src/parser.c</td>
 <td>토큰화, 확장, 문법 분석</td>
-<td>921</td>
 </tr>
 <tr>
 <td>src/execute.c</td>
 <td>fork/exec, 파이프, 재지향, 캡처</td>
-<td>469</td>
 </tr>
 <tr>
 <td>src/jobs.c</td>
 <td>백그라운드 작업</td>
-<td>154</td>
 </tr>
 <tr>
 <td>src/builtin.c</td>
 <td>내장 명령 디스패치</td>
-<td>522</td>
 </tr>
 <tr>
 <td>src/cmd_ls.c</td>
 <td>ls</td>
-<td>370</td>
 </tr>
 <tr>
 <td>src/cmd_fs.c</td>
 <td>mkdir/rmdir/ln/cp/rm/mv</td>
-<td>938</td>
 </tr>
 <tr>
 <td>src/cmd_text.c</td>
 <td>cat/grep</td>
-<td>469</td>
 </tr>
 <tr>
 <td>src/cmd_explain.c</td>
 <td>파서 시각화</td>
-<td>111</td>
 </tr>
 <tr>
 <td>src/cmd_pipestat.c</td>
 <td>파이프 단계 계측</td>
-<td>330</td>
 </tr>
 <tr>
 <td>src/cmd_trace.c</td>
 <td>ptrace 시스템 호출 추적</td>
-<td>563</td>
 </tr>
 <tr>
 <td>src/cmd_dbg.c</td>
 <td>ELF/ptrace 미니 디버거</td>
-<td>1253</td>
 </tr>
 <tr>
 <td>src/cmd_inspect.c</td>
 <td>/proc 기반 프로세스 조사</td>
-<td>276</td>
 </tr>
 <tr>
 <td>src/cmd_rec.c</td>
 <td>세션 녹화/재생/HTML</td>
-<td>1002</td>
 </tr>
 <tr>
 <td>src/util.c</td>
 <td>공용 유틸</td>
-<td>528</td>
 </tr>
 <tr>
 <td>src/trace_syscalls.h</td>
 <td>시스템 호출 이름 테이블 (생성)</td>
-<td>137</td>
-</tr>
-<tr>
-<td>합계</td>
-<td>직접 작성 8,543 + 생성 137 = 8,680</td>
-<td></td>
 </tr>
 </tbody></table>
 <h2>2.3 핵심 자료구조</h2>
@@ -370,7 +347,7 @@
 <h3>2.4.6 dbg</h3>
 <p>ELF .symtab/.dynsym에서 함수 심볼을 읽고, PIE는 /proc/PID/maps에서 로드 기준 주소를 계산한다. 0xCC(int3) 브레이크포인트를 심고, 정지 시 원본 바이트를 복원한 뒤 rip를 1 되돌린다. step/continue에서 한 명령을 실행한 후 브레이크포인트를 다시 심는다. regs, x/Nx, bt, finish, SIGSEGV 자동 분석을 지원한다.</p>
 <h3>2.4.7 inspect</h3>
-<p>inspect는 /proc/PID/status, fd, maps, ns를 읽어 프로세스의 상태를 보여 준다. 쉘 자신의 pid/ppid/pgid/sid, uid/gid, cwd, umask, rlimit, 백그라운드 작업도 함께 출력한다. 시스템 프로그래밍에서 프로세스와 파일 디스크립터가 어떻게 표현되는지 직접 확인하는 도구이다.</p>
+<p>inspect는 /proc/PID/status, fd, maps, ns와 프로세스 트리를 읽어 상태를 보여 준다. 쉘 자신의 pid/ppid/pgid/sid, uid/gid, cwd, umask, rlimit, 백그라운드 작업도 함께 출력한다. 시스템 프로그래밍에서 프로세스와 파일 디스크립터가 어떻게 표현되는지 직접 확인하는 도구이다.</p>
 <h3>2.4.8 rec/replay</h3>
 <p>rec는 전경 명령의 stdout/stderr를 relay 프로세스로 실시간 중계하면서 동시에 임시 파일에 기록한다. 백그라운드(&amp;) 명령은 지연 캡처 경로로 처리한다. replay는 명령을 재실행하지 않고 출력과 상태를 재생하며, rec export는 단독 HTML 타임라인을 만든다. -x는 explain과 trace -c 요약을 추가한다.</p>
 <pre>record: C/O/E/S/T/X (명령, stdout, stderr, 상태, ms, 진단)
@@ -386,12 +363,12 @@ export: HTML + inline CSS, 서버 불필요</pre>
 <tr>
 <td>경제성</td>
 <td>1,000~10,000줄 원칙</td>
-<td>직접 작성 8,543줄, 생성 포함 8,680줄로 준수</td>
+<td>직접 작성 8,626줄, 생성 포함 8,763줄로 준수</td>
 </tr>
 <tr>
 <td>안정성</td>
 <td>외부 환경 변화에도 동작</td>
-<td>오류 반환값 검사, 좀비 회수, 재지향 복구, 257개 자동 테스트</td>
+<td>오류 반환값 검사, 좀비 회수, 재지향 복구, 263개 자동 테스트</td>
 </tr>
 <tr>
 <td>생산성</td>
@@ -417,19 +394,19 @@ export: HTML + inline CSS, 서버 불필요</pre>
 </tr></thead><tbody>
 <tr>
 <td>include/myshell.h + src/*.c</td>
-<td>8,543</td>
+<td>8,626</td>
 </tr>
 <tr>
 <td>빈 줄</td>
-<td>997</td>
+<td>1,007</td>
 </tr>
 <tr>
 <td>주석</td>
-<td>204</td>
+<td>164</td>
 </tr>
 <tr>
 <td>주석·빈 줄 제외 코드</td>
-<td>7,342</td>
+<td>7,455</td>
 </tr>
 <tr>
 <td>생성된 trace_syscalls.h</td>
@@ -437,15 +414,15 @@ export: HTML + inline CSS, 서버 불필요</pre>
 </tr>
 <tr>
 <td>테스트 코드(별도)</td>
-<td>1,201</td>
+<td>1,214</td>
 </tr>
 <tr>
 <td>생성 포함 총계</td>
-<td>8,680</td>
+<td>8,763</td>
 </tr>
 <tr>
 <td>생성·테스트 포함 총계</td>
-<td>9,881</td>
+<td>9,977</td>
 </tr>
 </tbody></table>
 <p>헤더와 기능별 소스를 분리해 빌드와 유지보수가 쉽도록 구성했다.</p>
@@ -490,15 +467,15 @@ export: HTML + inline CSS, 서버 불필요</pre>
 </tr>
 </tbody></table>
 <h2>4.2 테스트 설계</h2>
-<p>tests/run_tests.sh는 stdout/stderr/종료 상태를 비교하는 94개 기능 테스트를 수행한다. test_ext는 explain/&amp;&amp;/glob/pipestat 21개, test_file_input은 4개, test_trace는 32개, test_dbg는 44개, test_rec는 35개, test_inspect는 27개를 검사한다. test_signals.py는 pty.fork()로 Ctrl-C/Ctrl-Z 후 쉘 생존을 확인한다.</p>
+<p>tests/run_tests.sh는 stdout/stderr/종료 상태를 비교하는 94개 기능 테스트를 수행한다. test_ext는 explain/&amp;&amp;/glob/pipestat 21개, test_file_input은 4개, test_trace는 32개, test_dbg는 44개, test_rec는 35개, test_inspect는 31개를 검사한다. test_signals.py는 pty.fork()로 Ctrl-C/Ctrl-Z 후 쉘 생존을 확인한다.</p>
 <h2>4.3 테스트 결과</h2>
 <pre>Passed: 94
 File-input tests passed: 4
 Extension tests passed: 21
 Trace tests passed: 32
-Debugger tests passed: 44
+Debugger tests passed: 46
 Recording tests passed: 35
-Inspect tests passed: 27
+Inspect tests passed: 31
 SIGNAL TEST PASSED</pre>
 <div style="page-break-before: always;"></div>
 <h1>5. 프로젝트 결과</h1>
@@ -541,7 +518,7 @@ SIGNAL TEST PASSED</pre>
 <tr>
 <td>inspect</td>
 <td>완료</td>
-<td>/proc status/fd/maps/ns</td>
+<td>/proc status/fd/maps/ns/tree</td>
 </tr>
 <tr>
 <td>rec/replay</td>
@@ -550,7 +527,7 @@ SIGNAL TEST PASSED</pre>
 </tr>
 </tbody></table>
 <h2>5.2 완성도 평가</h2>
-<p>원 과제 요구사항과 11개 명령을 모두 유지했고, 8,680줄로 구성했다. 257개 자동 테스트와 PTY 시그널 테스트가 통과했다.</p>
+<p>원 과제 요구사항과 11개 명령을 모두 유지했고, 8,763줄로 구성했다. 263개 자동 테스트와 PTY 시그널 테스트가 통과했다.</p>
 <h2>5.3 일정/역할/위험</h2>
 <table><thead><tr>
 <th>주차</th>
@@ -675,8 +652,8 @@ make test</pre>
 </tr>
 <tr>
 <td>조사</td>
-<td>/proc status/fd/maps/ns/jobs/limits/오류</td>
-<td>27</td>
+<td>/proc status/fd/maps/ns/tree/jobs/limits/오류</td>
+<td>31</td>
 </tr>
 <tr>
 <td>시그널</td>
@@ -686,80 +663,28 @@ make test</pre>
 </tbody></table>
 <h1>부록 C. 소스 규모</h1>
 <table><thead><tr>
-<th>파일</th>
+<th>항목</th>
 <th>줄 수</th>
 </tr></thead><tbody>
 <tr>
-<td>include/myshell.h</td>
-<td>240</td>
+<td>include/myshell.h + src/*.c</td>
+<td>8,626</td>
 </tr>
 <tr>
-<td>src/main.c</td>
-<td>411</td>
-</tr>
-<tr>
-<td>src/parser.c</td>
-<td>921</td>
-</tr>
-<tr>
-<td>src/execute.c</td>
-<td>469</td>
-</tr>
-<tr>
-<td>src/jobs.c</td>
-<td>154</td>
-</tr>
-<tr>
-<td>src/builtin.c</td>
-<td>522</td>
-</tr>
-<tr>
-<td>src/cmd_ls.c</td>
-<td>370</td>
-</tr>
-<tr>
-<td>src/cmd_fs.c</td>
-<td>938</td>
-</tr>
-<tr>
-<td>src/cmd_text.c</td>
-<td>469</td>
-</tr>
-<tr>
-<td>src/cmd_explain.c</td>
-<td>111</td>
-</tr>
-<tr>
-<td>src/cmd_pipestat.c</td>
-<td>330</td>
-</tr>
-<tr>
-<td>src/cmd_trace.c</td>
-<td>563</td>
-</tr>
-<tr>
-<td>src/cmd_dbg.c</td>
-<td>1253</td>
-</tr>
-<tr>
-<td>src/cmd_inspect.c</td>
-<td>276</td>
-</tr>
-<tr>
-<td>src/cmd_rec.c</td>
-<td>1002</td>
-</tr>
-<tr>
-<td>src/util.c</td>
-<td>528</td>
-</tr>
-<tr>
-<td>src/trace_syscalls.h</td>
+<td>생성된 trace_syscalls.h</td>
 <td>137</td>
 </tr>
 <tr>
+<td>제품 소스 합계</td>
+<td>8,763</td>
+</tr>
+<tr>
+<td>테스트 코드</td>
+<td>1,214</td>
+</tr>
+<tr>
 <td>합계</td>
-<td>8,680 / 직접 작성 8,543</td>
+<td>9,977</td>
 </tr>
 </tbody></table>
 <h1>부록 D. 참고문헌</h1>

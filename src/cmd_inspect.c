@@ -1,6 +1,4 @@
-/*
- * cmd_inspect.c - inspect processes through /proc.
- */
+/* cmd_inspect.c - inspect processes through /proc. */
 #include "myshell.h"
 
 #include <dirent.h>
@@ -214,6 +212,122 @@ static void print_jobs(shell_state_t *sh)
         printf("  (none)\n");
 }
 
+typedef struct {
+    pid_t pid;
+    pid_t ppid;
+    char state;
+    char comm[64];
+} proc_entry_t;
+
+static int read_proc_stat(pid_t pid, proc_entry_t *entry)
+{
+    char path[64];
+    char line[1024];
+    char *left;
+    char *right;
+    FILE *fp;
+
+    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
+    fp = fopen(path, "r");
+    if (fp == NULL)
+        return -1;
+    if (fgets(line, sizeof(line), fp) == NULL) {
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+    left = strchr(line, '(');
+    right = strrchr(line, ')');
+    if (left == NULL || right == NULL || right <= left)
+        return -1;
+    entry->pid = pid;
+    entry->ppid = 0;
+    entry->state = '?';
+    {
+        size_t len = (size_t)(right - left - 1);
+
+        if (len >= sizeof(entry->comm))
+            len = sizeof(entry->comm) - 1;
+        memcpy(entry->comm, left + 1, len);
+        entry->comm[len] = '\0';
+    }
+    if (sscanf(right + 1, " %c %d", &entry->state, &entry->ppid) != 2)
+        return -1;
+    return 0;
+}
+
+static void print_tree_level(proc_entry_t *entries, int count, pid_t parent,
+                             int depth, int *used)
+{
+    int i;
+
+    if (depth > 16)
+        return;
+    for (i = 0; i < count; ++i) {
+        if (used[i] || entries[i].ppid != parent)
+            continue;
+        used[i] = 1;
+        printf("%*s%s (%d) [%c]\n", depth * 2, "", entries[i].comm,
+               (int)entries[i].pid, entries[i].state);
+        print_tree_level(entries, count, entries[i].pid, depth + 1, used);
+    }
+}
+
+static void print_process_tree(pid_t root)
+{
+    DIR *dir;
+    struct dirent *item;
+    proc_entry_t *entries;
+    int *used;
+    int count = 0;
+    int cap = 256;
+    int i;
+    int found = 0;
+
+    entries = msh_malloc((size_t)cap * sizeof(*entries));
+    dir = opendir("/proc");
+    if (dir == NULL) {
+        free(entries);
+        printf("process tree: unavailable (%s)\n", strerror(errno));
+        return;
+    }
+    while ((item = readdir(dir)) != NULL) {
+        char *end;
+        long value;
+
+        if (item->d_name[0] < '0' || item->d_name[0] > '9')
+            continue;
+        value = strtol(item->d_name, &end, 10);
+        if (*end != '\0' || value <= 0)
+            continue;
+        if (count == cap) {
+            cap *= 2;
+            entries = msh_realloc(entries, (size_t)cap * sizeof(*entries));
+        }
+        if (read_proc_stat((pid_t)value, &entries[count]) == 0)
+            ++count;
+    }
+    closedir(dir);
+
+    used = msh_calloc((size_t)(count > 0 ? count : 1), sizeof(*used));
+    printf("process tree (root=%d):\n", (int)root);
+    for (i = 0; i < count; ++i) {
+        if (entries[i].pid == root) {
+            used[i] = 1;
+            printf("%s (%d) [%c]\n", entries[i].comm, (int)entries[i].pid,
+                   entries[i].state);
+            found = 1;
+            break;
+        }
+    }
+    if (!found)
+        printf("(pid %d not found)\n", (int)root);
+    else
+        print_tree_level(entries, count, root, 1, used);
+    free(used);
+    free(entries);
+}
+
 int cmd_inspect(int argc, char **argv, shell_state_t *sh)
 {
     int do_fds = 0;
@@ -221,6 +335,7 @@ int cmd_inspect(int argc, char **argv, shell_state_t *sh)
     int do_ns = 0;
     int do_jobs = 0;
     int do_status = 0;
+    int do_tree = 0;
     int any_option = 0;
     pid_t pid = getpid();
     int i;
@@ -238,8 +353,10 @@ int cmd_inspect(int argc, char **argv, shell_state_t *sh)
             do_jobs = any_option = 1;
         } else if (strcmp(arg, "-s") == 0) {
             do_status = any_option = 1;
+        } else if (strcmp(arg, "-t") == 0) {
+            do_tree = any_option = 1;
         } else if (arg[0] == '-') {
-            msh_usage("inspect [-f|-m|-n|-j|-s] [PID]");
+            msh_usage("inspect [-f|-m|-n|-j|-s|-t] [PID]");
             return 2;
         } else {
             char *end;
@@ -257,6 +374,10 @@ int cmd_inspect(int argc, char **argv, shell_state_t *sh)
         do_status = do_fds = do_maps = do_ns = 1;
         if (pid == getpid())
             do_jobs = 1;
+    }
+    if (do_tree) {
+        print_process_tree(pid);
+        return 0;
     }
     if (pid == getpid())
         print_shell_identity(sh);

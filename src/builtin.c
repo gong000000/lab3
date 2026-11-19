@@ -494,7 +494,7 @@ int builtin_help(int argc, char **argv, shell_state_t *sh)
     printf("  trace [-c] [-f] [-e NAME[,NAME...]] COMMAND...\n");
     printf("  pipestat 'command1 | command2'\n");
     printf("  dbg PROGRAM [ARGS...]   (ELF/ptrace mini debugger)\n");
-    printf("  inspect [-f|-m|-n|-j|-s] [PID]  (/proc status/fds/maps/ns)\n");
+    printf("  inspect [-f|-m|-n|-j|-s|-t] [PID]  (/proc status/fds/maps/ns/tree)\n");
     printf("  rec start [-x] FILE | rec stop | rec status | rec export FILE HTML\n");
     printf("  replay FILE [-s SPEED]  (replay recorded commands/output)\n\n");
     printf("Expansion:\n  $(command) command substitution\n\n");

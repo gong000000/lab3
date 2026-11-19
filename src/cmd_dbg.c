@@ -1,24 +1,5 @@
 /*
- * cmd_dbg.c - a small x86_64 source-level debugger built into the shell.
- *
- * Usage: dbg PROGRAM [ARGS...]
- *
- * Commands:
- *   break SYMBOL | *ADDR     set a breakpoint
- *   run                      start (or restart) the program
- *   continue                 continue execution
- *   step                     execute one machine instruction
- *   finish                   run until the current function returns
- *   bt                       walk the frame-pointer chain
- *   regs                     show general-purpose registers
- *   x/Nx ADDR                dump N words (ADDR may be $reg or a symbol)
- *   info break               list breakpoints
- *   delete N                 remove a breakpoint
- *   quit                     leave the debugger
- *
- * ELF symbols come from .symtab (or .dynsym).  PIE load addresses are read
- * from /proc/PID/maps.  Breakpoints use the classic 0xCC/int3 technique:
- * restore the original byte, single-step, then reinsert.
+ * cmd_dbg.c - x86_64 ELF/ptrace debugger.
  */
 #include "myshell.h"
 

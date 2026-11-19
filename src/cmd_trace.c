@@ -1,11 +1,5 @@
 /*
- * cmd_trace.c - ptrace-based system call tracer (x86_64).
- *
- * Usage: trace [-c] [-f] [-e NAME[,NAME...]] command [args...]
- *
- * The tracer uses PTRACE_TRACEME in the child, then single-steps through
- * system call entry and exit stops.  -f follows fork/vfork/clone children,
- * -c prints a call summary, and -e restricts output to the named syscalls.
+ * cmd_trace.c - x86_64 ptrace system call tracer.
  */
 #include "myshell.h"
 #include "trace_syscalls.h"
