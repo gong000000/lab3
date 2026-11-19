@@ -554,7 +554,7 @@ File-input tests failed: 0
 Extension tests passed: 37
 Extension tests failed: 0
 ...
-Script tests passed: 54
+Script tests passed: 56
 ...
 Trace tests passed: 32
 ...
@@ -571,7 +571,7 @@ LINE EDITOR TEST PASSED
 - `tests/test_net.sh`: 25개 네트워크 테스트
 - `tests/test_file_input.sh`: 5개 파일 입력 테스트
 - `tests/test_ext.sh`: 37개 확장 테스트
-- `tests/test_script.sh`: 54개 스크립트 테스트
+- `tests/test_script.sh`: 56개 스크립트 테스트
 - `tests/test_trace.sh`: 32개 ptrace 추적 테스트
 - `tests/test_sha256.c`: SHA-256/HMAC 벡터 테스트
 - `tests/test_signals.py`: PTY 시그널/프롬프트 테스트

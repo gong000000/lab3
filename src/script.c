@@ -12,6 +12,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <glob.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1108,6 +1109,43 @@ static int raw_word_quoted(const char *raw)
     return 0;
 }
 
+static int has_wildcard_n(const char *text, size_t len)
+{
+    size_t i;
+
+    for (i = 0; i < len; ++i) {
+        if (text[i] == '*' || text[i] == '?' || text[i] == '[')
+            return 1;
+    }
+    return 0;
+}
+
+static void append_field(char ***result, int *count, const char *text,
+                         size_t len, int do_glob)
+{
+    if (do_glob && has_wildcard_n(text, len)) {
+        char *pattern = msh_strndup(text, len);
+        glob_t matches;
+        int rc;
+
+        memset(&matches, 0, sizeof(matches));
+        rc = glob(pattern, 0, NULL, &matches);
+        if (rc == 0) {
+            size_t i;
+
+            for (i = 0; i < matches.gl_pathc; ++i)
+                append_word(result, count, matches.gl_pathv[i],
+                            strlen(matches.gl_pathv[i]));
+            globfree(&matches);
+            free(pattern);
+            return;
+        }
+        globfree(&matches);
+        free(pattern);
+    }
+    append_word(result, count, text, len);
+}
+
 static int expand_words(char **raw, int nraw, shell_state_t *sh,
                         char ***out, int *out_count)
 {
@@ -1137,7 +1175,7 @@ static int expand_words(char **raw, int nraw, shell_state_t *sh,
             goto fail;
         }
         if (raw_word_quoted(raw[i])) {
-            append_word(&result, &count, expanded, strlen(expanded));
+            append_field(&result, &count, expanded, strlen(expanded), 0);
             free(expanded);
             continue;
         }
@@ -1152,7 +1190,7 @@ static int expand_words(char **raw, int nraw, shell_state_t *sh,
             start = p;
             while (*p != '\0' && !isspace((unsigned char)*p))
                 ++p;
-            append_word(&result, &count, start, (size_t)(p - start));
+            append_field(&result, &count, start, (size_t)(p - start), 1);
         }
         free(expanded);
     }

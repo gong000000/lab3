@@ -104,6 +104,13 @@ y"
 run 'for i in "a b" c; do echo "[$i]"; done'
 stdout_is "for quoted word" "[a b]
 [c]"
+printf 'a\n' > g1.txt
+printf 'b\n' > g2.txt
+run 'for f in g*.txt; do echo $f; done'
+stdout_is "for glob" "g1.txt
+g2.txt"
+run 'for f in "g*.txt"; do echo $f; done'
+stdout_is "for quoted glob" "g*.txt"
 
 # ------------------------------------------------------------------
 echo "== while / until =="
