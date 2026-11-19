@@ -38,6 +38,7 @@
 - readline 없이 termios raw 모드 라인 에디터를 구현해 한글 입력·히스토리·자동완성·역검색을 지원한다.
 - 재귀 하강 방식의 스크립트 해석기로 if/for/while, 함수, $(...) 명령 치환, 스크립트 파일 실행을 구현한다.
 - x86_64 ptrace로 시스템 호출을 추적하는 trace 명령을 구현한다.
+- ELF 심볼과 ptrace를 이용해 break/step/bt를 제공하는 미니 디버거 dbg를 구현한다.
 - 자동화된 기능 테스트, 네트워크 테스트, PTY 시그널 테스트로 안정성을 검증한다.
 - MIT 라이선스로 GitHub에 공개한다.
 
@@ -57,6 +58,7 @@
 | 라인 편집/히스토리 | termios raw 모드, UTF-8 폭 보정, 방향키/Home/End, Tab 완성, Ctrl-R, ~/.myshell_history |
 | 스크립트 언어 | $(...), if/elif/else/fi, for, while/until, break/continue, 함수, return, 위치 매개변수 |
 | 시스템 호출 추적 | trace -c/-f/-e, x86_64 ptrace, 인자·반환값·호출 요약 |
+| 미니 디버거 | dbg: ELF .symtab/.dynsym, 0xCC 브레이크포인트, regs/x/bt, PIE 주소 보정, SIGSEGV 분석 |
 | 문서/배포 | README, MIT LICENSE, 결과보고서(HWP/PDF), 자동 테스트 |
 
 
@@ -77,18 +79,19 @@
 
 ## 1.5 결과 요약
 
-최종 프로그램은 직접 작성한 헤더·C 소스 11,504줄(주석·공백 제외 9,792줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 내장 명령과 17개 보조 내장 명령, TCP 원격 쉘, UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기를 제공한다. 기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 5개, 스크립트 테스트 56개, 추적 테스트 32개와 PTY 시그널/라인 에디터 테스트를 통과했고, ASan/UBSan 빌드에서도 새 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.
+최종 프로그램은 직접 작성한 헤더·C 소스 12,770줄(주석·공백 제외 10,880줄)과 생성된 시스템 호출 이름 테이블 393줄로 구성되며, 11개 필수 내장 명령과 18개 보조 내장 명령, TCP 원격 쉘, UTF-8 라인 에디터, 스크립트 해석기, ptrace 추적기, 미니 디버거를 제공한다. 기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 파일 입력 테스트 5개, 스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개와 PTY 시그널/라인 에디터 테스트를 통과했고, ASan/UBSan 빌드에서도 새 기능 테스트를 통과했다. 저장소에는 MIT LICENSE와 결과보고서, 테스트 스크립트가 포함되어 있다.
 
 | 항목 | 결과 |
 |---|---|
-| 소스 규모 | 직접 작성 11,504줄 + 생성 테이블 393줄, 주석·공백 제외 9,792줄 (지침 충족) |
+| 소스 규모 | 직접 작성 12,770줄 + 생성 테이블 393줄, 주석·공백 제외 10,880줄 (지침 상한 소폭 초과) |
 | 필수 내장 명령 | ls, pwd, cd, mkdir, rmdir, ln, cp, rm, mv, cat, grep (11개) |
-| 보조 내장 명령 | echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history (17개) |
+| 보조 내장 명령 | echo, export, unset, jobs, wait, help, true, false, :, test, [, read, shift, source, ., trace, history, dbg (18개) |
 | 기능 테스트 | 94 / 94 통과 |
 | 확장 테스트 | 37 / 37 통과 (explain·&&/\|\|·glob·undo·serve·watch) |
 | 네트워크 테스트 | 25 / 25 통과 (HMAC·watcher·동시 접속·타임아웃·원격 파이프) |
 | 스크립트 테스트 | 56 / 56 통과 (치환·제어문·함수·스크립트 파일·오류) |
 | 추적 테스트 | 32 / 32 통과 (필터·요약·자식 추적·오류) |
+| 디버거 테스트 | 44 / 44 통과 (ELF/PIE·브레이크포인트·step·bt·SIGSEGV) |
 | 계측 테스트 | pipestat 단계별 바이트/시간/종료 코드, SHA-256/HMAC 벡터 |
 | 터미널 테스트 | PTY에서 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 확인 |
 | 문서/배포 | README, MIT LICENSE, HWP/PDF 보고서, 테스트 스크립트 |
@@ -161,7 +164,7 @@
 
 | 파일 | 역할 | 줄 수 |
 |---|---|---|
-| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 303 |
+| include/myshell.h | 공용 상수, 구조체, 함수 원형 | 304 |
 | src/main.c | REPL, 명령 목록 분리, 시그널, 터미널/프로세스 그룹 초기화 | 519 |
 | src/parser.c | 토큰화, 따옴표/변수/$(...) 확장, &&/\|\|/glob, 파이프라인/재지향 문법 | 958 |
 | src/execute.c | fork/exec, 파이프, dup2, 전경/백그라운드 대기, 명령 치환 캡처 | 488 |
@@ -173,6 +176,7 @@
 | src/cmd_fs.c | mkdir, rmdir, ln, cp, rm, mv (휴지통 연동) | 952 |
 | src/cmd_text.c | cat, grep (POSIX regex) | 469 |
 | src/cmd_trace.c | ptrace 시스템 호출 추적, 필터/요약/자식 추적 | 573 |
+| src/cmd_dbg.c | ELF 심볼, 0xCC 브레이크포인트, 레지스터/메모리/백트레이스 | 1263 |
 | src/trace_syscalls.h | x86_64 시스템 호출 이름 테이블 (생성 파일) | 393 |
 | src/cmd_net.c | TCP 원격 쉘 서버/클라이언트, HMAC·watcher·타임아웃 | 1139 |
 | src/cmd_explain.c | 파서 결과 ASCII 시각화 | 111 |
@@ -197,6 +201,8 @@
 | msh_function_t | name, body | 사용자 함수 이름과 본문 텍스트 |
 | snode_t | type, cmd, branches[], body, var, words[], cond, func_body | 스크립트 문장 트리(목록/명령/if/for/while/함수) |
 | tracee_t | pid, entered, nr, args[6], string_arg | ptrace 추적 중인 프로세스의 시스템 호출 진입/종료 상태 |
+| dbg_t | pid, bias, symbols[], breakpoints[], pending_bp | 디버거의 ELF 심볼, PIE 로드 기준, 브레이크포인트/정지 상태 |
+| dbg_bp_t | addr, orig_word, orig_byte, inserted, temporary | 0xCC 브레이크포인트와 복원용 원본 바이트 |
 | filter_t / summary_t | names[], count / name, count | trace의 -e 필터와 -c 호출 횟수 요약 |
 | net_buf_t | data, len, truncated | 원격 명령의 stdout/stderr 캡처 버퍼 |
 | connector_t | ALWAYS, AND, OR | &&/\|\|로 연결된 파이프라인의 실행 조건 |
@@ -394,6 +400,35 @@ if (sig == (SIGTRAP | 0x80)) {
 ```
 
 
+### 2.5.11 미니 디버거 dbg
+
+dbg는 ELF64 실행 파일을 읽어 .symtab(없으면 .dynsym)과 문자열 테이블에서 STT_FUNC 심볼의 이름·주소·크기를 수집한다. `break main`은 이 심볼을 실제 주소로 바꾸고, 대상 주소의 첫 바이트를 0xCC(int3)로 덮어쓴다. PIE 실행 파일은 심볼 값이 상대 주소이므로 /proc/PID/maps에서 첫 매핑의 시작 주소와 파일 오프셋을 읽어 로드 기준(bias)을 계산하고, 모든 심볼 주소에 더한다. 자식은 exec 전에 personality(ADDR_NO_RANDOMIZE)를 시도해 주소 무작위화를 줄인다.
+
+브레이크포인트에서 멈추면 원래 바이트를 복원하고 rip를 1 되돌려 원래 명령 앞에 세운다. 이 상태에서 step은 PTRACE_SINGLESTEP으로 한 명령을 실행하고, continue는 같은 방식으로 명령을 건너뛴 뒤 0xCC를 다시 심고 PTRACE_CONT로 진행한다. 이 복원→한 단계→재설치 순서가 디버거의 가장 까다로운 부분이다.
+
+| 명령 | 동작 |
+|---|---|
+| break SYMBOL \| *ADDR | 심볼/절대 주소에 0xCC 브레이크포인트 설치 |
+| run / continue | 대상 실행, 브레이크포인트나 시그널에서 정지 |
+| step / finish | 한 명령 실행 / 현재 함수의 반환 주소까지 실행 |
+| regs | rip, rsp, rbp, 범용 레지스터, eflags 출력 |
+| x/Nx ADDR | $reg·심볼·0x 주소에서 N개의 64비트 워드를 덤프 |
+| bt | rbp 체인을 따라 반환 주소를 심볼 이름으로 변환 |
+| info break / delete N | 브레이크포인트 목록/삭제 |
+
+백트레이스는 -fno-omit-frame-pointer로 컴파일된 프로그램의 rbp 체인을 따른다. 함수 첫 명령에서 멈춘 경우 rbp가 아직 호출자의 프레임을 가리키므로, 그때는 [rsp]의 복귀 주소를 먼저 출력하고 이후 rbp 체인을 이어 간다. SIGSEGV/SIGABRT 등으로 멈추면 rip와 백트레이스를 자동으로 출력해 크래시 지점을 바로 보여 준다.
+
+```text
+/* cmd_dbg.c: 브레이크포인트 정지 처리 (요약) */
++0xCC를 심을 때 원래 워드를 저장
++정지: POKEDATA(orig_word), regs.rip -= 1, SETREGS
++step: PTRACE_SINGLESTEP -> POKEDATA(0xCC) 재설치
++continue: 같은 재설치 후 PTRACE_CONT
++bt: ret = PEEKDATA(rbp + 8); rbp = PEEKDATA(rbp)
++
+```
+
+
 ## 2.6 설계 구성 요소와의 대응
 
 | 설계 구성 요소 | 본 프로젝트에서의 수행 내용 |
@@ -401,7 +436,7 @@ if (sig == (SIGTRAP | 0x80)) {
 | 목표/기준 설정 | 교재 357쪽 simplesh.c를 기준으로 5개 필수 요구사항과 11개 내장 명령, 원격 쉘 확장을 목표로 설정 |
 | 분석 | 요구사항을 R1~R6으로 분해하고, 프로세스/시그널/파일 시스템/텍스트/네트워크로 나누어 분석 |
 | 제작 | parser, executor, job manager, builtin, cmd_* 모듈로 구현. Makefile로 재현 가능한 빌드 제공 |
-| 시험 | 94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 56개 스크립트 + 32개 추적 테스트 + PTY 시그널/라인 에디터 테스트 |
+| 시험 | 94개 기능 + 37개 확장 + 25개 네트워크 + 5개 파일 입력 + 56개 스크립트 + 32개 추적 + 44개 디버거 테스트 + PTY 시그널/라인 에디터 테스트 |
 
 
 ---
@@ -411,9 +446,9 @@ if (sig == (SIGTRAP | 0x80)) {
 
 | 제한 요소 | 설계 기준 | 본 프로젝트의 대응 |
 |---|---|---|
-| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 직접 작성 11,504줄(주석·공백 제외 9,792줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
-| 안정성 | 외부 환경 변화에도 지속적으로 동작 | 오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 249개 자동 테스트, ASan/UBSan 검증 |
-| 생산성 | 모든 기능이 동작하고 응용 가능 | 11개 필수 명령 + 17개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace, README/보고서 제공 |
+| 경제성 | 3~4인이 한 학기에 구현 가능한 1,000~10,000줄 | 직접 작성 12,770줄(주석·공백 제외 10,880줄) + 생성 테이블 393줄. 외부 라이브러리 없이 libc/POSIX regex만 사용하여 유지보수 비용 최소화 |
+| 안정성 | 외부 환경 변화에도 지속적으로 동작 | 오류 반환값 검사, 좀비 회수, 재지향 실패 복구, 293개 자동 테스트, ASan/UBSan 검증 |
+| 생산성 | 모든 기능이 동작하고 응용 가능 | 11개 필수 명령 + 18개 보조 명령, 다단 파이프/재지향, 라인 에디터/스크립트/trace/dbg, README/보고서 제공 |
 | 윤리성/사회적 영향 | 안전하고 책임 있는 소프트웨어 | rm의 /, ., .. 보호, system()/popen() 미사용, MIT 라이선스로 투명한 재사용 허용 |
 | 표준성 | POSIX/Linux 표준 인터페이스 사용 | fork, execvp, waitpid, pipe, dup2, signal/sigaction, termios, dirent, regex 사용 |
 | 이식성 | 리눅스/WSL에서 빌드 및 실행 | Ubuntu 26.04 WSL2와 gcc 15.2에서 검증. GNU 확장은 _GNU_SOURCE로 명시 |
@@ -421,17 +456,17 @@ if (sig == (SIGTRAP | 0x80)) {
 
 ## 3.1 경제성
 
-전체 소스는 직접 작성분 11,504줄(주석·공백 제외 9,792줄)과 생성 테이블 393줄로 구성되어 설계 지침의 1,000~10,000줄 범위를 만족한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
+전체 소스는 직접 작성분 12,770줄(주석·공백 제외 10,880줄)과 생성 테이블 393줄로 구성되어 설계 지침의 1,000~10,000줄 범위를 참고했으며, 최종 디버거 확장으로 상한을 소폭 초과한다. 명령별 파일을 분리하고 공통 유틸을 util.c에 모아, 2인 팀이 기능 단위로 병렬 개발할 수 있도록 했다. 외부 라이브러리 의존성이 없어 빌드 환경 구축 비용도 작다.
 
 
 ## 3.2 안정성
 
-모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 기능·스크립트·추적·라인 에디터 테스트를 통과했다.
+모든 시스템 콜과 라이브러리 호출의 반환값을 검사하고, 실패 시 errno를 포함한 메시지를 출력한다. 백그라운드 작업은 waitpid(WNOHANG)로 주기적으로 회수하여 좀비 프로세스를 방지하고, 쉘 종료 시 실행 중인 작업에 SIGHUP을 보낸다. 파이프/재지향 실패 시 파일 디스크립터를 복원하며, ASan/UBSan 빌드에서도 기능·스크립트·추적·디버거·라인 에디터 테스트를 통과했다.
 
 
 ## 3.3 생산성
 
-ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. 라인 에디터와 스크립트, trace까지 같은 바이너리에 포함되어 별도 도구 없이 시스템 프로그래밍 실습을 할 수 있으며, 테스트는 make test로 재현한다.
+ls는 -a/-l/-R/-h, cp는 -r/-f/-i/-p, grep은 -i/-v/-n/-c/-l/-r/-E/-F/-q 등 실사용에 필요한 옵션을 제공한다. 내장 명령은 외부 프로그램을 호출하지 않으므로 PATH나 외부 패키지 설치 여부와 무관하게 동작한다. 라인 에디터와 스크립트, trace, dbg까지 같은 바이너리에 포함되어 별도 도구 없이 시스템 프로그래밍 실습을 할 수 있으며, 테스트는 make test로 재현한다.
 
 
 ## 3.4 윤리성과 사회적 영향
@@ -505,7 +540,7 @@ POSIX/Linux 시스템 콜과 C 표준 라이브러리를 사용했으며, 특정
 
 ## 4.6 테스트 설계와 자동화
 
-tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교한다. tests/test_ext.sh는 37개 확장 기능을, tests/test_net.sh는 인증·원격 파이프/재지향·동시 접속·타임아웃을 25개 항목으로 확인한다. tests/test_script.sh는 명령 치환·제어문·함수·스크립트 파일·오류 처리를 56개 항목으로, tests/test_trace.sh는 ptrace 필터·요약·자식 추적을 32개 항목으로 검사한다. tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 5개 항목으로 확인한다. tests/test_signals.py와 tests/test_lineedit.py는 pty.fork()로 가상 터미널을 열어 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 지속성을 확인한다. 전체는 make test로 실행한다.
+tests/run_tests.sh는 94개의 기능 검사를 수행한다. 각 검사는 stdout, stderr, 종료 상태를 기대값과 비교한다. tests/test_ext.sh는 37개 확장 기능을, tests/test_net.sh는 인증·원격 파이프/재지향·동시 접속·타임아웃을 25개 항목으로 확인한다. tests/test_script.sh는 명령 치환·제어문·함수·스크립트 파일·오류 처리를 56개 항목으로, tests/test_trace.sh는 ptrace 필터·요약·자식 추적을 32개 항목으로 검사한다. tests/test_dbg.sh는 ELF/PIE 브레이크포인트·step·finish·bt·SIGSEGV를 44개 항목으로 확인한다. tests/test_file_input.sh는 파일 입력에서 마지막 줄이 중복되지 않는지 5개 항목으로 확인한다. tests/test_signals.py와 tests/test_lineedit.py는 pty.fork()로 가상 터미널을 열어 Ctrl-C/Ctrl-Z, 한글 편집, Tab, Ctrl-R, 히스토리 지속성을 확인한다. 전체는 make test로 실행한다.
 
 
 ## 4.7 협업과 형상 관리
@@ -546,6 +581,7 @@ netserv는 getaddrinfo/socket/bind/listen/accept로 서버를 열고, 접속마�
 | 스크립트 | script.c | 문장 분리 → snode_t 트리 → 제어 흐름/함수/위치 매개변수 실행 |
 | $(...) | parser.c, execute.c | 균형 괄호 탐색, fork/pipe로 stdout 캡처, 중첩 치환 |
 | trace | cmd_trace.c, trace_syscalls.h | PTRACE_SYSCALL 진입/종료, -e 필터, -c 요약, -f 자식 추적 |
+| dbg | cmd_dbg.c | ELF 심볼, 0xCC 브레이크포인트 복원/재설치, PIE bias, rbp 백트레이스 |
 | pipestat | cmd_pipestat.c | relay 프로세스로 단계별 바이트/시간/종료 코드 수집 |
 | HMAC 인증 | cmd_net.c, sha256.c | nonce + HMAC-SHA256 챌린지-응답 |
 | netcli -w | cmd_net.c | 이벤트 로그를 tail해 원격 실행을 읽기 전용 관전 |
@@ -591,6 +627,10 @@ netserv는 getaddrinfo/socket/bind/listen/accept로 서버를 열고, 접속마�
 | 함수/위치 매개변수 | 완료 | $1~$9, $#, $@, shift, return, source, 스크립트 인자 |
 | $(...) | 완료 | 중첩 치환, 따옴표 안 치환, 대입문 확장 |
 | trace | 완료 | 시스템 호출 이름·인자·반환값, -e 필터, -c 요약, -f 자식 추적 |
+| dbg ELF/PIE | 완료 | .symtab/.dynsym 심볼, PIE 로드 기준 주소 계산 |
+| dbg 제어 | 완료 | break/run/continue/step/finish, 0xCC 복원·재설치 |
+| dbg 조사 | 완료 | regs, x/Nx, info break, delete, rbp 기반 bt |
+| dbg 시그널 | 완료 | SIGSEGV 지점 rip/백트레이스 자동 출력 |
 | HMAC 인증 | 완료 | nonce 기반 챌린지-응답, 토큰 미전송 |
 | netcli -w | 완료 | 원격 명령/상태 읽기 전용 관전 |
 
@@ -623,7 +663,7 @@ shell> exit
 
 ## 5.2 프로젝트 완성도 평가
 
-기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 스크립트 테스트 56개, 추적 테스트 32개, 파일 입력 테스트 5개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/라인 에디터 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED; LINE EDITOR TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·라인 에디터 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.
+기능 테스트 94개, 확장 테스트 37개, 네트워크 테스트 25개, 스크립트 테스트 56개, 추적 테스트 32개, 디버거 테스트 44개, 파일 입력 테스트 5개, SHA-256/HMAC 벡터가 모두 통과했고, PTY 시그널/라인 에디터 테스트도 통과했다(Passed: 94, Failed: 0; SIGNAL TEST PASSED; LINE EDITOR TEST PASSED). ASan/UBSan을 켠 빌드에서도 기능·스크립트·추적·디버거·라인 에디터 테스트를 통과했다. 다음 기능은 설계 범위에서 제외했다.
 
 | 제외 기능 | 이유 | 영향 |
 |---|---|---|
@@ -635,6 +675,7 @@ shell> exit
 | 산술 확장 $((...)) | 스크립트 필수 범위가 아님 | 수치 계산은 test/외부 명령 사용 |
 | break/continue 단계 | 한 단계만 지원 | 중첩 루프에서 break 2 불가 |
 | 루프/if 파이프 | done \| cmd, fi \| cmd 미지원 | 루프 결과를 파이프로 직접 전달 불가 |
+| dbg 역어셈블 | x86 명령 해석 범위가 방대해 제외 | disas 명령 없음 (regs/x/bt로 대체) |
 
 
 ## 5.3 일정 계획 평가
@@ -645,7 +686,7 @@ shell> exit
 | 12주 | 파서/실행기 구현 | 따옴표·변수 확장, 파이프·재지향, 내장 명령 디스패치 | 계획대로 |
 | 13주 | 시그널/작업 제어 | 프로세스 그룹, tcsetpgrp, VQUIT 매핑, jobs/wait | 계획대로 |
 | 14주 | 11개 명령 구현 및 통합 | 파일/텍스트 명령, 94개 기능 테스트, ASan 검증 | 테스트 보강으로 일부 지연 |
-| 15주 | 확장 기능, 보고서/GitHub 정리 | netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, 150여 개 추가 테스트 | 15주 내 완료 |
+| 15주 | 확장 기능, 보고서/GitHub 정리 | netserv/netcli, explain, pipestat, undo, serve, watch, HMAC, 라인 에디터, 스크립트, trace, dbg, 190여 개 추가 테스트 | 15주 내 완료 |
 
 14주차에 재귀 복사/삭제와 grep 옵션의 경계 조건을 보강했고, 15주차에 원격 쉘 확장과 네트워크 테스트를 추가했다.
 
@@ -654,10 +695,10 @@ shell> exit
 
 | 팀원 | 학번 | GitHub | 담당 업무 | 기여도 |
 |---|---|---|---|---|
-| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir | 50% |
-| 강동우 | 20223080 | pizza0420 | netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/PTY 테스트, 문서 | 50% |
+| 류동엽 | 20223154 | gong000000 | 쉘 코어(파서/실행기/시그널/작업 제어/재지향/파이프), 라인 에디터, 스크립트 해석기, trace, dbg, explain, netserv 서버, HMAC, serve, pwd, cd, ls, mkdir, rmdir | 50% |
+| 강동우 | 20223080 | pizza0420 | netcli/watcher, pipestat, undo/휴지통, watch, prompt, ln, cp, rm, mv, cat, grep, 스크립트/추적/디버거/PTY 테스트, 문서 | 50% |
 
-류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·netserv, 강동우는 파일/텍스트 명령과 netcli·테스트·문서를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.
+류동엽은 쉘 코어와 라인 에디터·스크립트 해석기·trace·dbg·netserv, 강동우는 파일/텍스트 명령과 netcli·테스트·문서를 담당했다. 명령 구현은 5개(pwd, cd, ls, mkdir, rmdir)와 6개(ln, cp, rm, mv, cat, grep)로 나눴다. 통합 전 두 사람이 상대 모듈의 테스트를 실행했다.
 
 
 ## 5.5 위험 처리
@@ -680,6 +721,8 @@ shell> exit
 | 한글 커서 어긋남 | UTF-8 편집 위치 오류 | mbrtowc/wcwidth 기반 표시 폭 계산 | PTY 한글 입력/이동 테스트 |
 | 스크립트 파서 회귀 | 기존 명령 실행 오류 | 명령 노드는 기존 parse_line/execute에 위임, 94개 회귀 테스트 유지 | 전체 테스트 통과 |
 | ptrace 차단 | trace 실행 불가 | PTRACE_TRACEME로 자기 자식만 추적, 실패 시 오류 메시지 | WSL2 추적 테스트 통과 |
+| 브레이크포인트 재설치 | 0xCC가 남아 무한 정지 | 원본 바이트 복원→SINGLESTEP→재설치 순서 | break/step/continue/finish 테스트 통과 |
+| PIE 주소 불일치 | 심볼 주소와 실제 주소 불일치 | /proc/PID/maps에서 bias 계산, 심볼 값에 가산 | PIE 테스트 통과 |
 
 
 ## 5.6 GitHub 저장소와 라이선스
@@ -731,6 +774,12 @@ make
 ./myshell -c 'trace -e write /bin/echo hi'
 ./myshell -c 'trace -c -e openat /bin/cat /etc/hostname'
 
+# 미니 디버거 (대화형)
+./myshell -c 'dbg ./a.out'
+#   (dbg) break main
+#   (dbg) run
+#   (dbg) regs / bt / x/4x $rsp / step / continue
+
 # 원격 쉘: 서버를 백그라운드로 실행하고 클라이언트로 명령 실행
 ./myshell -c 'netserv -1 -p 9090 & sleep 0.3; netcli -p 9090 127.0.0.1 echo hello; wait'
 
@@ -773,6 +822,7 @@ python3 tests/test_lineedit.py
 | 확장 | explain, &&/\|\|, glob, undo/휴지통, pipestat, serve, watch | 37 |
 | 스크립트 | 치환, if/elif/else, for, while/until, break/continue, 함수, source, 재지향, glob, 오류 | 56 |
 | 추적 | 시스템 호출 필터/요약/자식 추적/경로 문자열/오류 | 32 |
+| 디버거 | ELF/PIE, break/run/step/finish, regs, x/Nx, bt, SIGSEGV, 오류 | 44 |
 | 시그널 | PTY에서 Ctrl-C/Ctrl-Z 및 확장 프롬프트 | 6 |
 | 라인 에디터 | 한글 입력, 커서 이동, Tab, Ctrl-R, 히스토리 지속 | 1 시나리오 |
 
@@ -783,7 +833,7 @@ make test는 위 테스트를 모두 실행한다.
 
 | 파일 | 줄 수 | 비고 |
 |---|---|---|
-| include/myshell.h | 303 | 공용 선언 |
+| include/myshell.h | 304 | 공용 선언 |
 | src/main.c | 519 | REPL/시그널/터미널 |
 | src/parser.c | 958 | 토큰화/확장/문법 |
 | src/execute.c | 488 | fork/pipe/redirection/wait |
@@ -795,6 +845,7 @@ make test는 위 테스트를 모두 실행한다.
 | src/cmd_fs.c | 952 | mkdir/rmdir/ln/cp/rm/mv |
 | src/cmd_text.c | 469 | cat/grep |
 | src/cmd_trace.c | 573 | ptrace 추적 |
+| src/cmd_dbg.c | 1263 | 미니 gdb: ELF/ptrace/브레이크포인트 |
 | src/trace_syscalls.h | 393 | 시스템 호출 이름 테이블 |
 | src/cmd_net.c | 1139 | netserv/netcli/HMAC |
 | src/cmd_explain.c | 111 | explain |
@@ -804,7 +855,7 @@ make test는 위 테스트를 모두 실행한다.
 | src/cmd_pipestat.c | 330 | pipestat |
 | src/sha256.c | 204 | SHA-256/HMAC |
 | src/util.c | 567 | 공통 유틸 |
-| 합계 | 11,897 | 직접 작성 11,504 + 생성 테이블 393. 주석·공백 제외 코드 9,792줄 |
+| 합계 | 13,163 | 직접 작성 12,770 + 생성 테이블 393. 주석·공백 제외 코드 10,880줄 |
 
 
 # 부록 D. 참고문헌
@@ -815,5 +866,6 @@ make test는 위 테스트를 모두 실행한다.
 - POSIX regex: regcomp(3), regexec(3), regerror(3)
 - Linux man pages: socket(2), bind(2), listen(2), accept(2), connect(2), getaddrinfo(3), poll(2)
 - Linux man pages: ptrace(2), waitpid(2) __WALL, sys/user.h, asm/unistd_64.h
+- ELF64 format: elf(5), elf.h, .symtab/.dynsym/.strtab, personality(2) ADDR_NO_RANDOMIZE
 - Linux man pages: termios(3), wcwidth(3), mbrtowc(3)
 - 프로젝트 저장소: https://github.com/gong000000/lab3

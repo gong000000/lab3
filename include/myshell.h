@@ -19,7 +19,7 @@
 #include <termios.h>
 
 #define MSH_NAME          "myshell"
-#define MSH_VERSION       "1.1.0"
+#define MSH_VERSION       "1.2.0"
 #define MSH_PROMPT        "shell> "
 #define MSH_MAX_JOBS      64
 #define MSH_MAX_ARGS      256
@@ -191,6 +191,7 @@ int cmd_prompt(int argc, char **argv, shell_state_t *sh);
 int cmd_pipestat(int argc, char **argv, shell_state_t *sh);
 int cmd_history(int argc, char **argv, shell_state_t *sh);
 int cmd_trace(int argc, char **argv, shell_state_t *sh);
+int cmd_dbg(int argc, char **argv, shell_state_t *sh);
 const char *const *msh_builtin_names(int *count);
 
 /* lineedit.c */

@@ -2,8 +2,8 @@
 
 교재 357페이지의 `simplesh.c`를 확장한 POSIX 쉘입니다. Lab 3의 5개 요구사항과
 11개 내장 명령을 구현했고, TCP 기반 원격 쉘(`netserv`, `netcli`), UTF-8 라인
-에디터, 쉘 스크립트(`if`/`for`/`while`/함수/`$(...)`), ptrace 기반 `trace`를
-추가했습니다.
+에디터, 쉘 스크립트(`if`/`for`/`while`/함수/`$(...)`), ptrace 기반 `trace`,
+ELF/ptrace 기반 미니 디버거 `dbg`를 추가했습니다.
 
 - 저장소: <https://github.com/gong000000/lab3>
 - 라이선스: MIT
@@ -17,7 +17,7 @@
 | 시그널 | `SIGINT`(Ctrl-C), `SIGQUIT`(Ctrl-Z), 전경 작업만 종료 |
 | 재지향/파이프 | `<`, `>`, `>>`, `2>`, `2>>`, `2>&1`, `&>`, `&>>`, 다단 `\|` |
 | 내장 명령 | `ls`, `pwd`, `cd`, `mkdir`, `rmdir`, `ln`, `cp`, `rm`, `mv`, `cat`, `grep` |
-| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[`, `read`, `shift`, `source`, `.`, `trace`, `history` |
+| 보조 내장 명령 | `echo`, `export`, `unset`, `jobs`, `wait`, `help`, `true`, `false`, `:`, `test`, `[`, `read`, `shift`, `source`, `.`, `trace`, `history`, `dbg` |
 | 네트워크 확장 | `netserv`(TCP 서버), `netcli`(클라이언트), HMAC 챌린지-응답 인증, 동시 접속, 타임아웃 |
 | 원격 관전 | `netcli -w`로 서버에서 실행되는 명령/상태를 읽기 전용으로 확인 |
 | 파이프 계측 | `pipestat 'cmd1 \| cmd2'`로 단계별 바이트·시간·종료 코드 출력 |
@@ -36,6 +36,7 @@
 | 위치 매개변수 | `$0`~`$9`, `$#`, `$@`, `$*`, `${...}`, `shift` |
 | 스크립트 실행 | `myshell SCRIPT [ARGS...]`, `source FILE [ARGS...]`, `.` |
 | 시스템 호출 추적 | `trace [-c] [-f] [-e NAME,...] COMMAND` (x86_64 ptrace, 인자·반환값) |
+| 미니 디버거 | `dbg PROGRAM`: ELF 심볼, `break`/`run`/`step`/`continue`/`finish`, `regs`, `x/Nx`, `bt`, PIE, SIGSEGV 분석 |
 
 Ctrl-Z는 과제 명세에 맞춰 `SIGQUIT`에 매핑했습니다. 일반 리눅스의 `SIGTSTP`와
 다르며, 쉘 종료 시 터미널 설정을 복구합니다.
@@ -533,7 +534,39 @@ child
 - 경로 인자는 자식 프로세스 메모리에서 읽어 문자열로 보여 줍니다.
 - x86_64 Linux/WSL2에서 동작하며, `ptrace`가 허용된 환경이어야 합니다.
 
-#### (13) 테스트 실행
+#### (13) 미니 디버거
+
+```text
+shell> dbg ./a.out
+dbg: loaded ./a.out (executable, 10 symbols)
+(dbg) break main
+Breakpoint 1 at 0x401148 (main)
+(dbg) run
+Breakpoint 1, 0x401148 in main ()
+(dbg) regs
+rip=0x401148 rsp=0x7fffffffe4d8 rbp=0x7fffffffe580
+rax=0x... rbx=0x... rcx=0x... rdx=0x...
+...
+(dbg) bt
+#0  0x401148 in main ()  (rip=0x401148)
+#1  0x7ffff7c2a601  (ret=0x7ffff7c2a601)
+...
+(dbg) x/4x $rsp
+0x7fffffffe4d8: 0x000000000040115e 0x0000000000000000 ...
+(dbg) step
+Stopped at 0x40114c in main ()
+(dbg) continue
+v=42
+[Inferior exited with status 0]
+(dbg) quit
+```
+
+- `.symtab`/`.dynsym`에서 함수 심볼을 읽고, PIE는 `/proc/PID/maps`에서 로드 기준 주소를 계산합니다.
+- `0xCC` 브레이크포인트를 심고, 멈추면 원래 바이트를 복원한 뒤 `rip`를 1 되돌립니다. `step`/`continue` 시 한 명령을 실행한 후 브레이크포인트를 다시 심습니다.
+- `bt`는 `-fno-omit-frame-pointer`로 컴파일된 프로그램의 `rbp` 체인을 따라갑니다.
+- SIGSEGV 같은 시그널에서 멈추면 `rip`와 백트레이스를 자동으로 보여 줍니다.
+
+#### (14) 테스트 실행
 
 ```bash
 make test
@@ -558,6 +591,8 @@ Script tests passed: 56
 ...
 Trace tests passed: 32
 ...
+Debugger tests passed: 44
+...
 SHA-256/HMAC tests passed
 ...
 SIGNAL TEST PASSED
@@ -573,6 +608,7 @@ LINE EDITOR TEST PASSED
 - `tests/test_ext.sh`: 37개 확장 테스트
 - `tests/test_script.sh`: 56개 스크립트 테스트
 - `tests/test_trace.sh`: 32개 ptrace 추적 테스트
+- `tests/test_dbg.sh`: 44개 미니 디버거 테스트 (ELF/PIE/브레이크포인트/백트레이스/SIGSEGV)
 - `tests/test_sha256.c`: SHA-256/HMAC 벡터 테스트
 - `tests/test_signals.py`: PTY 시그널/프롬프트 테스트
 - `tests/test_lineedit.py`: PTY 라인 에디터/히스토리/한글 테스트
@@ -605,6 +641,7 @@ LINE EDITOR TEST PASSED
 | `22_script.png` | 스크립트 제어문/함수 | `for i in 1 2 3; do echo $i; done`, `greet() { ...; }` |
 | `23_script_file.png` | 스크립트 파일/위치 매개변수 | `./myshell demo.sh alice bob` |
 | `24_trace.png` | ptrace 추적/요약 | `trace -e write /bin/echo hi`, `trace -c -e openat /bin/cat /etc/hostname` |
+| `25_dbg.png` | 미니 gdb | `dbg ./a.out`, `break main`, `run`, `bt`, `x/4x $rsp`, `step`, `continue` |
 
 캡처 팁:
 
@@ -647,6 +684,7 @@ LINE EDITOR TEST PASSED
 │   ├── cmd_fs.c           mkdir, rmdir, ln, cp, rm, mv
 │   ├── cmd_text.c         cat, grep
 │   ├── cmd_trace.c        ptrace 기반 시스템 호출 추적
+│   ├── cmd_dbg.c          ELF 파싱·ptrace 미니 디버거
 │   ├── trace_syscalls.h   x86_64 시스템 호출 이름 테이블 (생성 파일)
 │   ├── cmd_net.c          netserv, netcli, HMAC, watcher
 │   ├── cmd_pipestat.c     파이프 계측
@@ -663,6 +701,7 @@ LINE EDITOR TEST PASSED
 │   ├── test_ext.sh
 │   ├── test_script.sh
 │   ├── test_trace.sh
+│   ├── test_dbg.sh
 │   ├── test_sha256.c
 │   ├── test_signals.py
 │   ├── test_lineedit.py
@@ -705,6 +744,7 @@ LINE EDITOR TEST PASSED
 | `shift` | `shift [N]` |
 | `source` / `.` | `source FILE [ARGS...]` |
 | `trace` | `-c`, `-f`, `-e NAME[,NAME...]`, `-e trace=NAME` |
+| `dbg` | `PROGRAM [ARGS...]`; 내부 명령 `break`, `run`, `continue`, `step`, `finish`, `bt`, `regs`, `x/Nx`, `info break`, `delete`, `quit` |
 
 ## 5. 제약
 
@@ -720,6 +760,9 @@ LINE EDITOR TEST PASSED
 - serve는 기본적으로 127.0.0.1에 바인딩하며 별도 인증은 없습니다. 외부 공개는 피합니다.
 - `grep`은 POSIX 기본/확장 정규표현식과 고정 문자열(`-F`)을 지원합니다.
 - `trace`는 x86_64 Linux 전용이며, 컨테이너 등에서 `ptrace`가 차단되면 동작하지 않습니다.
+- `dbg`는 x86_64 Linux 전용이며, ELF 심볼과 프레임 포인터 기반 백트레이스를 사용합니다.
+  `-fno-omit-frame-pointer` 없이 최적화된 프로그램은 `bt`가 부정확할 수 있고,
+  역어셈블(`disas`)은 지원하지 않습니다.
 
 ## 6. 팀 역할
 
